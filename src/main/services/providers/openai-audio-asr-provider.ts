@@ -13,6 +13,18 @@ const transcriptionResponseSchema = z.object({
   text: z.string()
 })
 
+const summarizeResponseText = (text: string): string => text.trim().replace(/\s+/g, ' ').slice(0, 160)
+
+const parseJsonPayload = async (response: Response): Promise<unknown> => {
+  try {
+    return await response.json()
+  } catch (error) {
+    throw new Error(
+      `ASR provider returned invalid JSON: ${error instanceof Error ? error.message : 'unknown parse error'}`
+    )
+  }
+}
+
 const createAudioFile = async (filePath: string): Promise<File> => {
   const resolvedFilePath = resolve(filePath)
   const contents = await readFile(resolvedFilePath)
@@ -27,13 +39,14 @@ export const createOpenAiAudioAsrProvider = ({
   apiKey,
   model
 }: OpenAiAudioAsrProviderOptions): AsrProvider => ({
-  transcribeChunk: async ({ filePath }) => {
+  transcribeChunk: async ({ filePath }, signal) => {
     const formData = new FormData()
     formData.set('model', model)
     formData.set('file', await createAudioFile(filePath))
 
     const response = await fetch(`${baseUrl}/audio/transcriptions`, {
       method: 'POST',
+      signal,
       headers: {
         Authorization: `Bearer ${apiKey}`
       },
@@ -41,10 +54,15 @@ export const createOpenAiAudioAsrProvider = ({
     })
 
     if (!response.ok) {
-      throw new Error(`ASR provider request failed with status ${response.status}`)
+      const responseText = summarizeResponseText(await response.text())
+      throw new Error(
+        responseText.length > 0
+          ? `ASR provider request failed with status ${response.status}: ${responseText}`
+          : `ASR provider request failed with status ${response.status}`
+      )
     }
 
-    const parsedResponse = transcriptionResponseSchema.safeParse(await response.json())
+    const parsedResponse = transcriptionResponseSchema.safeParse(await parseJsonPayload(response))
 
     if (!parsedResponse.success) {
       throw new Error('ASR provider returned invalid transcription response structure')

@@ -52,6 +52,8 @@ const getStageLabel = (stage: PipelineTaskStage): string => {
       return 'Running'
     case 'paused':
       return 'Paused'
+    case 'completed':
+      return 'Completed'
     case 'idle':
     default:
       return 'Idle'
@@ -109,14 +111,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
       return
     }
 
+    const status = await bridge.getTaskStatus()
     set({
-      ...createTaskState({
-        filePath: file.filePath,
-        stage: 'ready',
-        isRunning: false,
-        canStart: true,
-        lastRevisionSummary: 'File selected. Ready to start the MVP task flow.'
-      })
+      ...createTaskState(status)
     })
   },
   start: async () => {

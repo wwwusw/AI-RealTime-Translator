@@ -72,7 +72,7 @@ export const runPipeline = async ({
     const english = await asrProvider.transcribeChunk({
       chunkIndex: chunk.index,
       filePath: getChunkFilePath(chunk)
-    })
+    }, signal)
     signal?.throwIfAborted?.()
     const subtitleId = `chunk-${chunk.index}`
     const draftSubtitle: TranslationProviderSubtitle = {

@@ -12,7 +12,7 @@ export type ImportedMediaFile = {
   filePath: string
 }
 
-export type PipelineTaskStage = 'idle' | 'ready' | 'running' | 'paused'
+export type PipelineTaskStage = 'idle' | 'ready' | 'running' | 'paused' | 'completed'
 
 export type PipelineTaskStatus = {
   filePath: string | null

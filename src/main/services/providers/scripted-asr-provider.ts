@@ -10,5 +10,10 @@ type ScriptedAsrProviderOptions = {
 export const createScriptedAsrProvider = ({
   getEnglishByChunk
 }: ScriptedAsrProviderOptions): AsrProvider => ({
-  transcribeChunk: async (input) => getEnglishByChunk(input)
+  transcribeChunk: async (input, signal) => {
+    signal?.throwIfAborted?.()
+    const english = await getEnglishByChunk(input)
+    signal?.throwIfAborted?.()
+    return english
+  }
 })

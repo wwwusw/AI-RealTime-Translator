@@ -1,10 +1,23 @@
+import { basename } from 'node:path'
 import { ipcMain } from 'electron'
+import type { AppConfig } from '../../shared/config'
 import {
   pipelineTaskChannels,
+  type PipelineEvent,
   type PipelineTaskStage,
   type PipelineTaskStatus
 } from '../../shared/pipeline'
+import { loadConfig } from '../services/config-store'
 import { pickMediaFile } from '../services/file-picker'
+import { runPipeline } from '../services/pipeline-runner'
+import { createOpenAiAudioAsrProvider } from '../services/providers/openai-audio-asr-provider'
+import { createOpenAiChatTranslationProvider } from '../services/providers/openai-chat-translation-provider'
+import { createScriptedAsrProvider } from '../services/providers/scripted-asr-provider'
+
+type RunningTask = {
+  controller: AbortController
+  promise: Promise<void>
+}
 
 const buildTaskStatus = ({
   filePath,
@@ -22,60 +35,194 @@ const buildTaskStatus = ({
   lastRevisionSummary
 })
 
-const initialTaskStatus = (): PipelineTaskStatus =>
+const createIdleTaskStatus = (summary = 'No task has run yet.'): PipelineTaskStatus =>
   buildTaskStatus({
     filePath: null,
     stage: 'idle',
-    lastRevisionSummary: 'No task has run yet.'
+    lastRevisionSummary: summary
   })
 
-let currentTaskStatus = initialTaskStatus()
+const createAsrProvider = (config: AppConfig) =>
+  config.asr.provider === 'openai-audio'
+    ? createOpenAiAudioAsrProvider({
+        baseUrl: config.asr.baseUrl,
+        apiKey: config.asr.apiKey,
+        model: config.asr.model
+      })
+    : createScriptedAsrProvider({
+        getEnglishByChunk: async ({ chunkIndex, filePath }) =>
+          `Scripted transcript ${chunkIndex + 1} from ${basename(filePath)}`
+      })
+
+const createRevisionSummary = (event: PipelineEvent): string | null => {
+  switch (event.type) {
+    case 'subtitle-revised':
+      return `Latest revision: ${event.subtitle.chinese}`
+    case 'subtitle-added':
+      return `Draft subtitle: ${event.subtitle.english}`
+    case 'pipeline-completed':
+      return event.subtitles.length > 0
+        ? null
+        : 'Pipeline completed without emitting subtitles.'
+    default:
+      return null
+  }
+}
+
+let currentTaskStatus = createIdleTaskStatus()
+let runningTask: RunningTask | null = null
+
+const setTaskStatus = (status: PipelineTaskStatus) => {
+  currentTaskStatus = status
+  return currentTaskStatus
+}
+
+const isAbortError = (error: unknown): boolean =>
+  error instanceof Error && error.name === 'AbortError'
+
+const startPipelineRun = (filePath: string, config: AppConfig): PipelineTaskStatus => {
+  const controller = new AbortController()
+  const translationProvider = createOpenAiChatTranslationProvider(config.translation)
+  const asrProvider = createAsrProvider(config)
+
+  setTaskStatus(
+    buildTaskStatus({
+      filePath,
+      stage: 'running',
+      lastRevisionSummary: 'Task started. Waiting for pipeline events.'
+    })
+  )
+
+  const promise = runPipeline({
+    chunks: [
+      {
+        index: 0,
+        startMs: 0,
+        endMs: 0,
+        filePath
+      }
+    ],
+    asrProvider,
+    translationProvider,
+    revisionWindowSize: config.revisionWindowSize,
+    signal: controller.signal,
+    emitEvent: (event) => {
+      const nextSummary = createRevisionSummary(event)
+      if (!nextSummary) {
+        return
+      }
+
+      setTaskStatus(
+        buildTaskStatus({
+          filePath: currentTaskStatus.filePath,
+          stage: currentTaskStatus.stage,
+          lastRevisionSummary: nextSummary
+        })
+      )
+    }
+  })
+    .then(() => {
+      if (runningTask?.controller !== controller || controller.signal.aborted) {
+        return
+      }
+
+      setTaskStatus(
+        buildTaskStatus({
+          filePath,
+          stage: 'completed',
+          lastRevisionSummary: currentTaskStatus.lastRevisionSummary
+        })
+      )
+    })
+    .catch((error: unknown) => {
+      if (runningTask?.controller !== controller) {
+        return
+      }
+
+      if (controller.signal.aborted || isAbortError(error)) {
+        return
+      }
+
+      const message = error instanceof Error ? error.message : 'unknown pipeline error'
+      setTaskStatus(
+        buildTaskStatus({
+          filePath,
+          stage: 'ready',
+          lastRevisionSummary: `Task failed: ${message}`
+        })
+      )
+    })
+    .finally(() => {
+      if (runningTask?.controller === controller) {
+        runningTask = null
+      }
+    })
+
+  runningTask = {
+    controller,
+    promise
+  }
+
+  return currentTaskStatus
+}
 
 export const registerTaskHandlers = () => {
   ipcMain.handle(pipelineTaskChannels.pickMediaFile, async () => {
     const file = await pickMediaFile()
 
     if (file) {
-      currentTaskStatus = buildTaskStatus({
-        filePath: file.filePath,
-        stage: 'ready',
-        lastRevisionSummary: 'File selected. Ready to start the MVP task flow.'
-      })
+      setTaskStatus(
+        buildTaskStatus({
+          filePath: file.filePath,
+          stage: 'ready',
+          lastRevisionSummary: 'File selected. Ready to start the task.'
+        })
+      )
     }
 
     return file
   })
-  ipcMain.handle(pipelineTaskChannels.getTaskStatus, () => currentTaskStatus)
-  ipcMain.handle(pipelineTaskChannels.startTask, (_event, filePath: string | null) => {
+
+  ipcMain.handle(pipelineTaskChannels.getTaskStatus, async () => currentTaskStatus)
+
+  ipcMain.handle(pipelineTaskChannels.startTask, async (_event, filePath: string | null) => {
+    if (runningTask) {
+      return currentTaskStatus
+    }
+
     const nextFilePath = filePath ?? currentTaskStatus.filePath
 
     if (!nextFilePath) {
       return currentTaskStatus
     }
 
-    currentTaskStatus = buildTaskStatus({
-      filePath: nextFilePath,
-      stage: 'running',
-      lastRevisionSummary: 'Task started. Execution controls are wired, with deeper pipeline work still pending.'
-    })
-
-    return currentTaskStatus
+    const config = loadConfig()
+    return startPipelineRun(nextFilePath, config)
   })
-  ipcMain.handle(pipelineTaskChannels.pauseTask, () => {
-    if (!currentTaskStatus.filePath) {
+
+  ipcMain.handle(pipelineTaskChannels.pauseTask, async () => {
+    if (currentTaskStatus.stage !== 'running' || !runningTask || !currentTaskStatus.filePath) {
       return currentTaskStatus
     }
 
-    currentTaskStatus = buildTaskStatus({
-      filePath: currentTaskStatus.filePath,
-      stage: 'paused',
-      lastRevisionSummary: 'Pause requested. Abort hooks are ready for a fuller pipeline integration.'
-    })
+    runningTask.controller.abort()
+    runningTask = null
 
-    return currentTaskStatus
+    return setTaskStatus(
+      buildTaskStatus({
+        filePath: currentTaskStatus.filePath,
+        stage: 'paused',
+        lastRevisionSummary: 'Task paused. The current pipeline run was aborted.'
+      })
+    )
   })
-  ipcMain.handle(pipelineTaskChannels.resetTask, () => {
-    currentTaskStatus = initialTaskStatus()
-    return currentTaskStatus
+
+  ipcMain.handle(pipelineTaskChannels.resetTask, async () => {
+    if (runningTask) {
+      runningTask.controller.abort()
+      runningTask = null
+    }
+
+    return setTaskStatus(createIdleTaskStatus('Task reset. No file is selected.'))
   })
 }

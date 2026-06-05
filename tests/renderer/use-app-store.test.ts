@@ -18,7 +18,18 @@ describe('useAppStore task controls', () => {
 
   it('tracks pick, start, pause, and reset through the task bridge', async () => {
     const pickMediaFile = vi.fn().mockResolvedValue({ filePath: 'fixtures/chunk-0.wav' })
-    const getTaskStatus = vi.fn().mockResolvedValue(createStatus())
+    const getTaskStatus = vi
+      .fn()
+      .mockResolvedValueOnce(
+        createStatus({
+          filePath: 'fixtures/chunk-0.wav',
+          stage: 'ready',
+          isRunning: false,
+          canStart: true,
+          lastRevisionSummary: 'Main process says the task is ready.'
+        })
+      )
+      .mockResolvedValue(createStatus())
     const startTask = vi
       .fn()
       .mockResolvedValue(
@@ -60,6 +71,8 @@ describe('useAppStore task controls', () => {
     await useAppStore.getState().pick()
     expect(useAppStore.getState().filePath).toBe('fixtures/chunk-0.wav')
     expect(useAppStore.getState().canStart).toBe(true)
+    expect(useAppStore.getState().lastRevisionSummary).toBe('Main process says the task is ready.')
+    expect(getTaskStatus).toHaveBeenCalledTimes(1)
 
     await useAppStore.getState().start()
     expect(useAppStore.getState().isRunning).toBe(true)

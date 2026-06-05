@@ -12,7 +12,8 @@ describe('runPipeline', () => {
     ]
 
     const asrProvider = createScriptedAsrProvider({
-      getEnglishByChunk: async ({ chunkIndex, filePath }) => `english line ${chunkIndex + 1} from ${filePath}`
+      getEnglishByChunk: async ({ chunkIndex, filePath }) =>
+        `english line ${chunkIndex + 1} from ${filePath}`
     })
 
     const translationProvider = {
@@ -66,12 +67,10 @@ describe('runPipeline', () => {
     ).rejects.toThrow('translateBatch returned mismatched subtitle ids')
   })
 
-  it('forwards an abort signal to translation provider calls', async () => {
+  it('forwards an abort signal to ASR and translation provider calls', async () => {
     const signal = new AbortController().signal
     const chunks = [{ index: 0, startMs: 0, endMs: 5_000, filePath: 'chunk-0.wav' }]
-    const asrProvider = createScriptedAsrProvider({
-      getEnglishByChunk: async () => 'hello world'
-    })
+    const transcribeChunk = vi.fn().mockResolvedValue('hello world')
     const translateBatch = vi
       .fn()
       .mockResolvedValue([{ id: 'chunk-0', chinese: '你好，世界' }])
@@ -81,7 +80,9 @@ describe('runPipeline', () => {
 
     await runPipeline({
       chunks,
-      asrProvider,
+      asrProvider: {
+        transcribeChunk
+      },
       translationProvider: {
         translateBatch,
         reviseBatch
@@ -90,6 +91,13 @@ describe('runPipeline', () => {
       signal
     })
 
+    expect(transcribeChunk).toHaveBeenCalledWith(
+      {
+        chunkIndex: 0,
+        filePath: 'chunk-0.wav'
+      },
+      signal
+    )
     expect(translateBatch).toHaveBeenCalledWith(
       [{ id: 'chunk-0', english: 'hello world', chinese: '' }],
       signal

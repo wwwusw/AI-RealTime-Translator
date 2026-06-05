@@ -15,7 +15,7 @@ export type TranslationProviderResult = {
 }
 
 export type AsrProvider = {
-  transcribeChunk: (input: AsrProviderInput) => Promise<string>
+  transcribeChunk: (input: AsrProviderInput, signal?: AbortSignal) => Promise<string>
 }
 
 export type TranslationProvider = {
