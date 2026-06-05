@@ -53,4 +53,12 @@ describe('config defaults', () => {
     expect(merged.asr.provider).toBe(defaultAppConfig.asr.provider)
     expect(merged.asr.baseUrl).toBe(defaultAppConfig.asr.baseUrl)
   })
+
+  it('throws when a leaf field has an invalid type', () => {
+    expect(() =>
+      mergeConfig({
+        chunkDurationMs: 'oops'
+      })
+    ).toThrow()
+  })
 })
