@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
+import { registerConfigHandlers } from './ipc/config'
 import { getPreloadPath } from './paths'
 
 const createWindow = async () => {
@@ -19,7 +20,10 @@ const createWindow = async () => {
   await window.loadFile(join(__dirname, '../renderer/index.html'))
 }
 
-app.whenReady().then(createWindow)
+app.whenReady().then(async () => {
+  registerConfigHandlers()
+  await createWindow()
+})
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
