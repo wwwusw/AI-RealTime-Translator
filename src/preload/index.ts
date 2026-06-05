@@ -10,7 +10,11 @@ const appConfigApi: AppConfigBridge = {
 }
 
 const pipelineTasksApi: PipelineTasksBridge = {
-  pickMediaFile: () => ipcRenderer.invoke(pipelineTaskChannels.pickMediaFile)
+  pickMediaFile: () => ipcRenderer.invoke(pipelineTaskChannels.pickMediaFile),
+  getTaskStatus: () => ipcRenderer.invoke(pipelineTaskChannels.getTaskStatus),
+  startTask: (filePath) => ipcRenderer.invoke(pipelineTaskChannels.startTask, filePath),
+  pauseTask: () => ipcRenderer.invoke(pipelineTaskChannels.pauseTask),
+  resetTask: () => ipcRenderer.invoke(pipelineTaskChannels.resetTask)
 }
 
 contextBridge.exposeInMainWorld('appConfig', appConfigApi)

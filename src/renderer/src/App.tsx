@@ -1,11 +1,22 @@
 import { useEffect } from 'react'
 import { SettingsPanel } from './features/settings/SettingsPanel'
+import { StatusBar } from './features/status/StatusBar'
+import { Workspace } from './features/workspace/Workspace'
 import { useAppStore } from './state/useAppStore'
 import './styles.css'
 
 export default function App() {
   const config = useAppStore((state) => state.config)
   const hydrateConfig = useAppStore((state) => state.hydrateConfig)
+  const filePath = useAppStore((state) => state.filePath)
+  const canStart = useAppStore((state) => state.canStart)
+  const isRunning = useAppStore((state) => state.isRunning)
+  const stageLabel = useAppStore((state) => state.stageLabel)
+  const lastRevisionSummary = useAppStore((state) => state.lastRevisionSummary)
+  const pick = useAppStore((state) => state.pick)
+  const start = useAppStore((state) => state.start)
+  const pause = useAppStore((state) => state.pause)
+  const reset = useAppStore((state) => state.reset)
 
   useEffect(() => {
     void hydrateConfig()
@@ -18,6 +29,21 @@ export default function App() {
         <h1>准备开始本地文件同传</h1>
         <p>先把桌面壳层和配置骨架跑通，再进入后续的 Provider 与流水线任务。</p>
       </section>
+      <Workspace
+        filePath={filePath}
+        canStart={canStart}
+        isRunning={isRunning}
+        onPick={() => void pick()}
+        onStart={() => void start()}
+        onPause={() => void pause()}
+        onReset={() => void reset()}
+      />
+      <StatusBar
+        translationModel={config.translation.model}
+        asrProvider={config.asr.provider}
+        stageLabel={stageLabel}
+        lastRevisionSummary={lastRevisionSummary}
+      />
       <SettingsPanel
         asrProvider={config.asr.provider}
         translationBaseUrl={config.translation.baseUrl}

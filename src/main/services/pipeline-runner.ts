@@ -68,10 +68,12 @@ export const runPipeline = async ({
   let subtitles: SubtitleLine[] = []
 
   for (const chunk of chunks) {
+    signal?.throwIfAborted?.()
     const english = await asrProvider.transcribeChunk({
       chunkIndex: chunk.index,
       filePath: getChunkFilePath(chunk)
     })
+    signal?.throwIfAborted?.()
     const subtitleId = `chunk-${chunk.index}`
     const draftSubtitle: TranslationProviderSubtitle = {
       id: subtitleId,
@@ -82,6 +84,7 @@ export const runPipeline = async ({
       [draftSubtitle],
       signal
     )
+    signal?.throwIfAborted?.()
     const translatedChineseById = mapValidatedResults(
       'translateBatch',
       [draftSubtitle],
@@ -112,6 +115,7 @@ export const runPipeline = async ({
       revisionWindowSubtitles,
       signal
     )
+    signal?.throwIfAborted?.()
     const revisedChineseById = mapValidatedResults(
       'reviseBatch',
       revisionWindowSubtitles,

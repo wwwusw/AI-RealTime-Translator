@@ -1,15 +1,33 @@
 import type { SubtitleLine } from './subtitles'
 
 export const pipelineTaskChannels = {
-  pickMediaFile: 'pipeline:pick-media-file'
+  pickMediaFile: 'pipeline:pick-media-file',
+  getTaskStatus: 'pipeline:get-task-status',
+  startTask: 'pipeline:start-task',
+  pauseTask: 'pipeline:pause-task',
+  resetTask: 'pipeline:reset-task'
 } as const
 
 export type ImportedMediaFile = {
   filePath: string
 }
 
+export type PipelineTaskStage = 'idle' | 'ready' | 'running' | 'paused'
+
+export type PipelineTaskStatus = {
+  filePath: string | null
+  stage: PipelineTaskStage
+  isRunning: boolean
+  canStart: boolean
+  lastRevisionSummary: string
+}
+
 export type PipelineTasksBridge = {
   pickMediaFile: () => Promise<ImportedMediaFile | null>
+  getTaskStatus: () => Promise<PipelineTaskStatus>
+  startTask: (filePath: string | null) => Promise<PipelineTaskStatus>
+  pauseTask: () => Promise<PipelineTaskStatus>
+  resetTask: () => Promise<PipelineTaskStatus>
 }
 
 export type PlannedChunk = {
