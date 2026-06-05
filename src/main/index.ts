@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
 import { registerConfigHandlers } from './ipc/config'
+import { registerTaskHandlers } from './ipc/tasks'
 import { getPreloadPath } from './paths'
 
 const createWindow = async () => {
@@ -22,6 +23,7 @@ const createWindow = async () => {
 
 app.whenReady().then(async () => {
   registerConfigHandlers()
+  registerTaskHandlers()
   await createWindow()
 })
 
