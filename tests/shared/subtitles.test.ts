@@ -17,6 +17,24 @@ describe('subtitle revision window', () => {
     expect(revised[1].revisionCount).toBe(1)
   })
 
+  it('applySubtitleRevision only updates matching subtitles that are still draft', () => {
+    const finalized = {
+      ...createSubtitle({ id: '1', english: 'older line', chinese: 'older line zh' }),
+      status: 'final' as const
+    }
+    const draft = createSubtitle({ id: '2', english: 'recent line', chinese: 'recent line zh' })
+
+    const revised = applySubtitleRevision([finalized, draft], [
+      { id: '1', chinese: 'should stay frozen' },
+      { id: '2', chinese: 'updated recent line' }
+    ])
+
+    expect(revised[0].chinese).toBe('older line zh')
+    expect(revised[0].revisionCount).toBe(0)
+    expect(revised[1].chinese).toBe('updated recent line')
+    expect(revised[1].revisionCount).toBe(1)
+  })
+
   it('freezeExpiredDrafts marks the first subtitle as final when the window size is 4 and keeps the last subtitle as draft', () => {
     const subtitles = Array.from({ length: 5 }, (_, index) =>
       createSubtitle({

@@ -28,7 +28,7 @@ export const applySubtitleRevision = (
 ): SubtitleLine[] =>
   subtitles.map((line) => {
     const revision = revisions.find((item) => item.id === line.id)
-    if (!revision) {
+    if (!revision || line.status !== 'draft') {
       return line
     }
 
