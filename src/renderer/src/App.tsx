@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { SettingsPanel } from './features/settings/SettingsPanel'
 import { StatusBar } from './features/status/StatusBar'
+import { SubtitleTimeline } from './features/subtitles/SubtitleTimeline'
 import { Workspace } from './features/workspace/Workspace'
 import { useAppStore } from './state/useAppStore'
 import './styles.css'
@@ -13,6 +14,7 @@ export default function App() {
   const isRunning = useAppStore((state) => state.isRunning)
   const stageLabel = useAppStore((state) => state.stageLabel)
   const lastRevisionSummary = useAppStore((state) => state.lastRevisionSummary)
+  const subtitles = useAppStore((state) => state.subtitles)
   const pick = useAppStore((state) => state.pick)
   const start = useAppStore((state) => state.start)
   const pause = useAppStore((state) => state.pause)
@@ -26,8 +28,8 @@ export default function App() {
     <main className="app-shell">
       <section className="hero-card">
         <p className="eyebrow">AI RealTime Translator</p>
-        <h1>准备开始本地文件同传</h1>
-        <p>先把桌面壳层和配置骨架跑通，再进入后续的 Provider 与流水线任务。</p>
+        <h1>准备开始本地文件字幕时间轴演示</h1>
+        <p>先把本地文件翻译流程跑通，再逐步接入系统音频实时采集。</p>
       </section>
       <Workspace
         filePath={filePath}
@@ -44,6 +46,7 @@ export default function App() {
         stageLabel={stageLabel}
         lastRevisionSummary={lastRevisionSummary}
       />
+      <SubtitleTimeline subtitles={subtitles} />
       <SettingsPanel
         asrProvider={config.asr.provider}
         translationBaseUrl={config.translation.baseUrl}

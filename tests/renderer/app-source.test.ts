@@ -7,8 +7,8 @@ describe('App source', () => {
     const source = readFileSync(resolve('src/renderer/src/App.tsx'), 'utf8')
 
     expect(source).toContain('AI RealTime Translator')
-    expect(source).toContain('准备开始本地文件同传')
-    expect(source).toContain('先把桌面壳层和配置骨架跑通，再进入后续的 Provider 与流水线任务。')
-    expect(source).not.toContain('鍑嗗')
+    expect(source).toContain('准备开始本地文件字幕时间轴演示')
+    expect(source).toContain('先把本地文件翻译流程跑通，再逐步接入系统音频实时采集。')
+    expect(source).toContain('SubtitleTimeline')
   })
 })
