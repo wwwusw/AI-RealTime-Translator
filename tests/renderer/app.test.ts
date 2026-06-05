@@ -16,6 +16,8 @@ describe('App', () => {
   it('shows a settings summary panel with translation defaults', () => {
     const html = renderToStaticMarkup(createElement(App))
 
+    expect(html).toContain('ASR Provider')
+    expect(html).toContain('scripted')
     expect(html).toContain('Translation Base URL')
     expect(html).toContain('https://api.deepseek.com')
     expect(html).toContain('Translation Model')

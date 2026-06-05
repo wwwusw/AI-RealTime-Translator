@@ -19,6 +19,7 @@ export default function App() {
         <p>先把桌面壳层和配置骨架跑通，再进入后续的 Provider 与流水线任务。</p>
       </section>
       <SettingsPanel
+        asrProvider={config.asr.provider}
         translationBaseUrl={config.translation.baseUrl}
         translationModel={config.translation.model}
         hasTranslationApiKey={config.translation.apiKey.trim().length > 0}
