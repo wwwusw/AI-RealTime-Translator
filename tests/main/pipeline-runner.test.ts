@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { runPipeline } from '../../src/main/services/pipeline-runner'
 import { createScriptedAsrProvider } from '../../src/main/services/providers/scripted-asr-provider'
 import type { PipelineEvent } from '../../src/shared/pipeline'
@@ -64,5 +64,39 @@ describe('runPipeline', () => {
         emitEvent: () => {}
       })
     ).rejects.toThrow('translateBatch returned mismatched subtitle ids')
+  })
+
+  it('forwards an abort signal to translation provider calls', async () => {
+    const signal = new AbortController().signal
+    const chunks = [{ index: 0, startMs: 0, endMs: 5_000, filePath: 'chunk-0.wav' }]
+    const asrProvider = createScriptedAsrProvider({
+      getEnglishByChunk: async () => 'hello world'
+    })
+    const translateBatch = vi
+      .fn()
+      .mockResolvedValue([{ id: 'chunk-0', chinese: '你好，世界' }])
+    const reviseBatch = vi
+      .fn()
+      .mockResolvedValue([{ id: 'chunk-0', chinese: '你好，世界' }])
+
+    await runPipeline({
+      chunks,
+      asrProvider,
+      translationProvider: {
+        translateBatch,
+        reviseBatch
+      },
+      emitEvent: () => {},
+      signal
+    })
+
+    expect(translateBatch).toHaveBeenCalledWith(
+      [{ id: 'chunk-0', english: 'hello world', chinese: '' }],
+      signal
+    )
+    expect(reviseBatch).toHaveBeenCalledWith(
+      [{ id: 'chunk-0', english: 'hello world', chinese: '你好，世界' }],
+      signal
+    )
   })
 })

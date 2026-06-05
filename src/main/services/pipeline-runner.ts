@@ -18,6 +18,7 @@ type RunPipelineOptions = {
   translationProvider: TranslationProvider
   emitEvent: (event: PipelineEvent) => void
   revisionWindowSize?: number
+  signal?: AbortSignal
 }
 
 const getChunkFilePath = (chunk: PlannedChunk): string => {
@@ -61,7 +62,8 @@ export const runPipeline = async ({
   asrProvider,
   translationProvider,
   emitEvent,
-  revisionWindowSize = 2
+  revisionWindowSize = 2,
+  signal
 }: RunPipelineOptions): Promise<SubtitleLine[]> => {
   let subtitles: SubtitleLine[] = []
 
@@ -76,7 +78,10 @@ export const runPipeline = async ({
       english,
       chinese: ''
     }
-    const translatedResults = await translationProvider.translateBatch([draftSubtitle])
+    const translatedResults = await translationProvider.translateBatch(
+      [draftSubtitle],
+      signal
+    )
     const translatedChineseById = mapValidatedResults(
       'translateBatch',
       [draftSubtitle],
@@ -104,7 +109,8 @@ export const runPipeline = async ({
         chinese: line.chinese
       }))
     const revisedResults = await translationProvider.reviseBatch(
-      revisionWindowSubtitles
+      revisionWindowSubtitles,
+      signal
     )
     const revisedChineseById = mapValidatedResults(
       'reviseBatch',

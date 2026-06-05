@@ -46,6 +46,16 @@ const buildUserPrompt = (subtitles: TranslationProviderSubtitle[]): string =>
     }))
   })
 
+const parseChatCompletionContent = (payload: unknown): string => {
+  const parsedPayload = chatCompletionResponseSchema.safeParse(payload)
+
+  if (!parsedPayload.success) {
+    throw new Error('Translation provider returned invalid chat response structure')
+  }
+
+  return parsedPayload.data.choices[0].message.content
+}
+
 const parseResults = (content: string): TranslationProviderResult[] => {
   let parsedContent: unknown
 
@@ -57,7 +67,13 @@ const parseResults = (content: string): TranslationProviderResult[] => {
     )
   }
 
-  return subtitlesPayloadSchema.parse(parsedContent).subtitles
+  const parsedPayload = subtitlesPayloadSchema.safeParse(parsedContent)
+
+  if (!parsedPayload.success) {
+    throw new Error('Translation provider returned invalid subtitles payload structure')
+  }
+
+  return parsedPayload.data.subtitles
 }
 
 const createBatchHandler =
@@ -65,9 +81,13 @@ const createBatchHandler =
     options: OpenAiChatTranslationProviderOptions,
     operation: 'translate' | 'revise'
   ) =>
-  async (subtitles: TranslationProviderSubtitle[]): Promise<TranslationProviderResult[]> => {
+  async (
+    subtitles: TranslationProviderSubtitle[],
+    signal?: AbortSignal
+  ): Promise<TranslationProviderResult[]> => {
     const response = await fetch(`${options.baseUrl}/chat/completions`, {
       method: 'POST',
+      signal,
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${options.apiKey}`
@@ -94,8 +114,7 @@ const createBatchHandler =
       throw new Error(`Translation provider request failed with status ${response.status}`)
     }
 
-    const payload = chatCompletionResponseSchema.parse(await response.json())
-    return parseResults(payload.choices[0].message.content)
+    return parseResults(parseChatCompletionContent(await response.json()))
   }
 
 export const createOpenAiChatTranslationProvider = ({

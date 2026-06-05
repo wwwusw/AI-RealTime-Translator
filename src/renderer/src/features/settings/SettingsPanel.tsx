@@ -14,7 +14,7 @@ export function SettingsPanel({
   return (
     <section className="settings-panel" aria-label="Settings summary">
       <p className="eyebrow">Settings Summary</p>
-      <h2>Translation Settings</h2>
+      <h2>Provider Settings</h2>
       <dl className="settings-grid">
         <dt>ASR Provider</dt>
         <dd>{asrProvider}</dd>

@@ -16,6 +16,7 @@ describe('App', () => {
   it('shows a settings summary panel with translation defaults', () => {
     const html = renderToStaticMarkup(createElement(App))
 
+    expect(html).toContain('Provider Settings')
     expect(html).toContain('ASR Provider')
     expect(html).toContain('scripted')
     expect(html).toContain('Translation Base URL')

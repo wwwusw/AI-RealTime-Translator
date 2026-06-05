@@ -20,9 +20,11 @@ export type AsrProvider = {
 
 export type TranslationProvider = {
   translateBatch: (
-    subtitles: TranslationProviderSubtitle[]
+    subtitles: TranslationProviderSubtitle[],
+    signal?: AbortSignal
   ) => Promise<TranslationProviderResult[]>
   reviseBatch: (
-    subtitles: TranslationProviderSubtitle[]
+    subtitles: TranslationProviderSubtitle[],
+    signal?: AbortSignal
   ) => Promise<TranslationProviderResult[]>
 }
