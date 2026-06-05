@@ -33,7 +33,6 @@ export type PipelineSubtitleAddedEvent = {
 
 export type PipelineSubtitleRevisedEvent = {
   type: 'subtitle-revised'
-  chunk: PlannedChunk
   subtitle: SubtitleLine
 }
 

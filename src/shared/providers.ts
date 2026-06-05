@@ -1,10 +1,28 @@
-import type { PlannedChunk } from './pipeline'
+export type AsrProviderInput = {
+  chunkIndex: number
+  filePath: string
+}
+
+export type TranslationProviderSubtitle = {
+  id: string
+  english: string
+  chinese: string
+}
+
+export type TranslationProviderResult = {
+  id: string
+  chinese: string
+}
 
 export type AsrProvider = {
-  transcribeChunk: (chunk: PlannedChunk) => Promise<string>
+  transcribeChunk: (input: AsrProviderInput) => Promise<string>
 }
 
 export type TranslationProvider = {
-  translateBatch: (englishLines: string[]) => Promise<string[]>
-  reviseBatch: (englishLines: string[]) => Promise<string[]>
+  translateBatch: (
+    subtitles: TranslationProviderSubtitle[]
+  ) => Promise<TranslationProviderResult[]>
+  reviseBatch: (
+    subtitles: TranslationProviderSubtitle[]
+  ) => Promise<TranslationProviderResult[]>
 }

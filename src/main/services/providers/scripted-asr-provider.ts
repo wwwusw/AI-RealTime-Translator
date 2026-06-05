@@ -1,11 +1,14 @@
 import type { AsrProvider } from '../../../shared/providers'
 
 type ScriptedAsrProviderOptions = {
-  getEnglishByChunkIndex: (chunkIndex: number) => Promise<string> | string
+  getEnglishByChunk: (input: {
+    chunkIndex: number
+    filePath: string
+  }) => Promise<string> | string
 }
 
 export const createScriptedAsrProvider = ({
-  getEnglishByChunkIndex
+  getEnglishByChunk
 }: ScriptedAsrProviderOptions): AsrProvider => ({
-  transcribeChunk: async (chunk) => getEnglishByChunkIndex(chunk.index)
+  transcribeChunk: async (input) => getEnglishByChunk(input)
 })

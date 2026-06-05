@@ -12,14 +12,16 @@ describe('runPipeline', () => {
     ]
 
     const asrProvider = createScriptedAsrProvider({
-      getEnglishByChunkIndex: async (chunkIndex) => `english line ${chunkIndex + 1}`
+      getEnglishByChunk: async ({ chunkIndex, filePath }) => `english line ${chunkIndex + 1} from ${filePath}`
     })
 
     const translationProvider = {
-      translateBatch: async (englishLines: string[]) =>
-        englishLines.map((english) => `中文 ${english}`),
-      reviseBatch: async (englishLines: string[]) =>
-        englishLines.map((english) => `修订 ${english}`)
+      translateBatch: async (
+        subtitles: Array<{ id: string; english: string; chinese: string }>
+      ) => subtitles.map((subtitle) => ({ id: subtitle.id, chinese: `中文 ${subtitle.english}` })),
+      reviseBatch: async (
+        subtitles: Array<{ id: string; english: string; chinese: string }>
+      ) => subtitles.map((subtitle) => ({ id: subtitle.id, chinese: `修订 ${subtitle.english}` }))
     }
 
     await runPipeline({
@@ -31,8 +33,36 @@ describe('runPipeline', () => {
       }
     })
 
-    expect(events.some((event) => event.type === 'subtitle-added')).toBe(true)
-    expect(events.some((event) => event.type === 'subtitle-revised')).toBe(true)
+    const addedEvent = events.find((event) => event.type === 'subtitle-added')
+    const revisedEvent = events.find((event) => event.type === 'subtitle-revised')
+
+    expect(addedEvent).toBeDefined()
+    expect(revisedEvent).toBeDefined()
+    expect(revisedEvent).not.toHaveProperty('chunk')
     expect(events.at(-1)?.type).toBe('pipeline-completed')
+  })
+
+  it('throws when translateBatch returns results with missing ids', async () => {
+    const chunks = [{ index: 0, startMs: 0, endMs: 5_000, filePath: 'chunk-0.wav' }]
+
+    const asrProvider = createScriptedAsrProvider({
+      getEnglishByChunk: async ({ chunkIndex }) => `english line ${chunkIndex + 1}`
+    })
+
+    const translationProvider = {
+      translateBatch: async () => [],
+      reviseBatch: async (
+        subtitles: Array<{ id: string; english: string; chinese: string }>
+      ) => subtitles.map((subtitle) => ({ id: subtitle.id, chinese: `修订 ${subtitle.english}` }))
+    }
+
+    await expect(
+      runPipeline({
+        chunks,
+        asrProvider,
+        translationProvider,
+        emitEvent: () => {}
+      })
+    ).rejects.toThrow('translateBatch returned mismatched subtitle ids')
   })
 })
