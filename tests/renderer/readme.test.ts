@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 describe('README', () => {
-  it('documents the current MVP capabilities and setup', () => {
+  it('documents the current MVP capabilities, setup, and mock timeline limitation', () => {
     const readme = readFileSync(resolve('README.md'), 'utf8')
 
     expect(readme).toContain('Electron')
@@ -16,7 +16,9 @@ describe('README', () => {
     expect(readme).toContain('model')
     expect(readme).toContain('npm install')
     expect(readme).toContain('npm run dev')
-    expect(readme).toContain('本地文件输入')
-    expect(readme).toContain('系统音频实时采集')
+    expect(readme).toContain('mock timeline')
+    expect(readme).toContain('real subtitle event stream')
+    expect(readme).toContain('local file input')
+    expect(readme).toContain('System audio capture')
   })
 })

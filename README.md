@@ -1,41 +1,43 @@
 # AI RealTime Translator
 
-一个基于 Electron 的本地文件字幕翻译 MVP，当前重点是把桌面工作区、任务状态和字幕时间轴演示页先跑通。
+An Electron MVP for local media translation. The current renderer page includes a mock timeline so we can validate layout, status copy, and subtitle styling before the real subtitle event stream is connected.
 
-## 当前能力
+## Current capabilities
 
-- 导入本地媒体文件并展示任务工作区
-- 展示基础任务状态、最近修订摘要和 Provider 配置摘要
-- 在 renderer 中演示最小可用的字幕时间轴
-- `draft` 字幕显示“处理中”，`final` 字幕显示“已稳定”
-- 修订过的字幕有单独高亮样式，中文主显示、英文辅显示
+- Import a local media file and show the workspace/task controls
+- Show task status, revision summary, and provider settings
+- Render a mock timeline in the renderer when a file is selected but real subtitle events are still unavailable
+- Show Chinese as the primary subtitle line and English as supporting text
+- Highlight revised draft rows without pretending the renderer is already showing live subtitle events
 
-## 技术栈
+## Tech stack
 
 - Electron
 - React
 - TypeScript
 - ffmpeg-static
-- DeepSeek API（用于翻译与纠错，采用 OpenAI 兼容格式）
+- DeepSeek API for translation and correction via an OpenAI-compatible format
 
-## 配置说明
+## Configuration
 
-- `baseUrl`：OpenAI 兼容接口地址，可指向 DeepSeek API
-- `apiKey`：翻译与纠错请求使用的密钥
-- `model`：翻译与纠错模型名称
+- `baseUrl`: base URL for the OpenAI-compatible translation endpoint
+- `apiKey`: API key for translation/correction requests
+- `model`: model name for translation/correction requests
 
-## 运行方式
+## Run locally
 
 ```bash
 npm install
 npm run dev
 ```
 
-## 已知限制
+## Known limitations
 
-- 第一阶段只支持本地文件输入
-- 系统音频实时采集将在下一阶段实现
+- Phase 1 supports local file input only
+- The current timeline is still a mock timeline
+- The real subtitle event stream is not wired yet
+- System audio capture will be implemented in a later phase
 
-## 后续说明
+## Future notes
 
-如果后续引入别的框架，或复用历史代码片段、脚手架和实现策略，会在 README 里继续追加说明。
+If we later introduce another framework or reuse historical code snippets, we will append that note here.

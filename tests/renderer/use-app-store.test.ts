@@ -90,7 +90,29 @@ describe('useAppStore task controls', () => {
     expect(useAppStore.getState().canStart).toBe(false)
   })
 
-  it('provides demo subtitles that reflect task progress for the timeline UI', async () => {
+  it('keeps subtitles empty while idle or after a reset', async () => {
+    window.appConfig = {
+      load: vi.fn().mockResolvedValue(defaultAppConfig),
+      save: vi.fn().mockResolvedValue(defaultAppConfig)
+    }
+    window.pipelineTasks = {
+      pickMediaFile: vi.fn().mockResolvedValue(null),
+      getTaskStatus: vi.fn().mockResolvedValue(createStatus()),
+      startTask: vi.fn().mockResolvedValue(createStatus()),
+      pauseTask: vi.fn().mockResolvedValue(createStatus()),
+      resetTask: vi.fn().mockResolvedValue(createStatus())
+    }
+
+    const { useAppStore } = await import('../../src/renderer/src/state/useAppStore')
+
+    await useAppStore.getState().hydrateConfig()
+    expect(useAppStore.getState().subtitles).toEqual([])
+
+    await useAppStore.getState().reset()
+    expect(useAppStore.getState().subtitles).toEqual([])
+  })
+
+  it('provides clearly marked mock subtitles only when a file is present but no real events exist yet', async () => {
     window.appConfig = {
       load: vi.fn().mockResolvedValue(defaultAppConfig),
       save: vi.fn().mockResolvedValue(defaultAppConfig)
@@ -100,10 +122,10 @@ describe('useAppStore task controls', () => {
       getTaskStatus: vi.fn().mockResolvedValue(
         createStatus({
           filePath: 'fixtures/demo.wav',
-          stage: 'running',
-          isRunning: true,
-          canStart: false,
-          lastRevisionSummary: 'One line is still being refined.'
+          stage: 'ready',
+          isRunning: false,
+          canStart: true,
+          lastRevisionSummary: 'Mock timeline only. Real subtitle events are not wired yet.'
         })
       ),
       startTask: vi.fn().mockResolvedValue(createStatus()),
@@ -117,8 +139,7 @@ describe('useAppStore task controls', () => {
     const subtitles = useAppStore.getState().subtitles
 
     expect(subtitles.length).toBeGreaterThan(0)
-    expect(subtitles.some((line) => line.status === 'draft')).toBe(true)
-    expect(subtitles.some((line) => line.status === 'final')).toBe(true)
+    expect(subtitles.every((line) => line.status === 'draft')).toBe(true)
     expect(subtitles.some((line) => line.revisionCount > 0)).toBe(true)
   })
 })

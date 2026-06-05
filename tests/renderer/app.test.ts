@@ -4,15 +4,14 @@ import { describe, expect, it } from 'vitest'
 import App from '../../src/renderer/src/App'
 
 describe('App', () => {
-  it('shows the demo workspace, status summary, and subtitle timeline', () => {
+  it('shows the empty timeline state before any file is selected', () => {
     const html = renderToStaticMarkup(createElement(App))
 
     expect(html).toContain('AI RealTime Translator')
-    expect(html).toContain('先把本地文件翻译流程跑通，再逐步接入系统音频实时采集。')
-    expect(html).toContain('Task Controls')
-    expect(html).toContain('Provider Settings')
-    expect(html).toContain('字幕时间轴')
-    expect(html).toContain('处理中')
+    expect(html).toContain('mock timeline')
+    expect(html).toContain('No media file selected yet.')
+    expect(html).toContain('empty state')
+    expect(html).not.toContain('Revision count:')
   })
 
   it('shows a settings summary panel with translation defaults', () => {

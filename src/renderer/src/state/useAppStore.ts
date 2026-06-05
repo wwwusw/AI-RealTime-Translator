@@ -14,6 +14,8 @@ export type TimelineSubtitle = {
   revisionCount: number
 }
 
+export type TimelineMode = 'empty' | 'mock'
+
 type AppStoreTaskState = {
   filePath: string | null
   stage: PipelineTaskStage
@@ -22,6 +24,7 @@ type AppStoreTaskState = {
   canStart: boolean
   lastRevisionSummary: string
   subtitles: TimelineSubtitle[]
+  timelineMode: TimelineMode
 }
 
 type AppStore = {
@@ -33,6 +36,7 @@ type AppStore = {
   canStart: boolean
   lastRevisionSummary: string
   subtitles: TimelineSubtitle[]
+  timelineMode: TimelineMode
   hydrateConfig: () => Promise<void>
   saveConfig: (config: AppConfig) => Promise<void>
   pick: () => Promise<void>
@@ -73,54 +77,42 @@ const getStageLabel = (stage: PipelineTaskStage): string => {
   }
 }
 
-const createDemoSubtitles = (status?: PipelineTaskStatus): TimelineSubtitle[] => {
-  const stage = status?.stage ?? 'idle'
+const createMockSubtitles = (): TimelineSubtitle[] => [
+  {
+    id: 'timeline-1',
+    startMs: 0,
+    endMs: 2800,
+    english: 'Mock line: the local file is ready for timeline preview.',
+    chinese: '演示字幕：本地文件已准备好预览时间轴。',
+    status: 'draft',
+    revisionCount: 0
+  },
+  {
+    id: 'timeline-2',
+    startMs: 2800,
+    endMs: 6100,
+    english: 'Mock line: this row shows how a revised draft would look.',
+    chinese: '演示字幕：这一行用于展示修订中的草稿样式。',
+    status: 'draft',
+    revisionCount: 1
+  }
+]
 
-  const firstLineFinal = stage === 'running' || stage === 'paused' || stage === 'completed'
-  const allStable = stage === 'completed'
+const createTaskState = (status?: PipelineTaskStatus): AppStoreTaskState => {
+  const hasFile = Boolean(status?.filePath)
+  const subtitles = hasFile ? createMockSubtitles() : []
 
-  return [
-    {
-      id: 'timeline-1',
-      startMs: 0,
-      endMs: 3200,
-      english: 'We loaded the local recording into the workspace.',
-      chinese: '本地录音已经载入工作区。',
-      status: firstLineFinal ? 'final' : 'draft',
-      revisionCount: 0
-    },
-    {
-      id: 'timeline-2',
-      startMs: 3200,
-      endMs: 6700,
-      english: 'The translation pass revised this line for clarity.',
-      chinese: '翻译阶段已经把这一句修订得更清楚。',
-      status: allStable ? 'final' : 'draft',
-      revisionCount: 2
-    },
-    {
-      id: 'timeline-3',
-      startMs: 6700,
-      endMs: 9800,
-      english: allStable
-        ? 'This segment is stable and ready to export.'
-        : 'This segment is still waiting for the final confirmation.',
-      chinese: allStable ? '这一段已经稳定，可以进入导出。' : '这一段还在等待最终确认。',
-      status: allStable ? 'final' : 'draft',
-      revisionCount: allStable ? 1 : 0
-    }
-  ]
+  return {
+    filePath: status?.filePath ?? null,
+    stage: status?.stage ?? 'idle',
+    stageLabel: getStageLabel(status?.stage ?? 'idle'),
+    isRunning: status?.isRunning ?? false,
+    canStart: status?.canStart ?? false,
+    lastRevisionSummary: status?.lastRevisionSummary ?? 'No task has run yet.',
+    subtitles,
+    timelineMode: hasFile ? 'mock' : 'empty'
+  }
 }
-
-const createTaskState = (status?: PipelineTaskStatus): AppStoreTaskState => ({
-  filePath: status?.filePath ?? null,
-  stage: status?.stage ?? 'idle',
-  stageLabel: getStageLabel(status?.stage ?? 'idle'),
-  isRunning: status?.isRunning ?? false,
-  canStart: status?.canStart ?? false,
-  lastRevisionSummary: status?.lastRevisionSummary ?? 'No task has run yet.',
-  subtitles: createDemoSubtitles(status)
-})
 
 export const useAppStore = create<AppStore>((set, get) => ({
   config: defaultAppConfig,

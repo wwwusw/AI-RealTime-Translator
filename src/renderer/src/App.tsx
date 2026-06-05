@@ -15,6 +15,7 @@ export default function App() {
   const stageLabel = useAppStore((state) => state.stageLabel)
   const lastRevisionSummary = useAppStore((state) => state.lastRevisionSummary)
   const subtitles = useAppStore((state) => state.subtitles)
+  const timelineMode = useAppStore((state) => state.timelineMode)
   const pick = useAppStore((state) => state.pick)
   const start = useAppStore((state) => state.start)
   const pause = useAppStore((state) => state.pause)
@@ -28,8 +29,11 @@ export default function App() {
     <main className="app-shell">
       <section className="hero-card">
         <p className="eyebrow">AI RealTime Translator</p>
-        <h1>准备开始本地文件字幕时间轴演示</h1>
-        <p>先把本地文件翻译流程跑通，再逐步接入系统音频实时采集。</p>
+        <h1>准备开始本地文件字幕演示页</h1>
+        <p>
+          当前时间轴仍是 mock timeline，用来演示 renderer 布局和状态样式；real subtitle event stream
+          还没有接入。
+        </p>
       </section>
       <Workspace
         filePath={filePath}
@@ -46,7 +50,7 @@ export default function App() {
         stageLabel={stageLabel}
         lastRevisionSummary={lastRevisionSummary}
       />
-      <SubtitleTimeline subtitles={subtitles} />
+      <SubtitleTimeline subtitles={subtitles} timelineMode={timelineMode} />
       <SettingsPanel
         asrProvider={config.asr.provider}
         translationBaseUrl={config.translation.baseUrl}
