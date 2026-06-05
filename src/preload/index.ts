@@ -1,10 +1,10 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { AppConfig } from '../shared/config'
+import type { AppConfigBridge } from '../shared/app-config-bridge'
 import { appConfigEvents } from '../shared/events'
 
-const appConfigApi = {
-  load: () => ipcRenderer.invoke(appConfigEvents.load) as Promise<AppConfig>,
-  save: (config: AppConfig) => ipcRenderer.invoke(appConfigEvents.save, config) as Promise<AppConfig>
+const appConfigApi: AppConfigBridge = {
+  load: () => ipcRenderer.invoke(appConfigEvents.load),
+  save: (config) => ipcRenderer.invoke(appConfigEvents.save, config)
 }
 
 contextBridge.exposeInMainWorld('appConfig', appConfigApi)

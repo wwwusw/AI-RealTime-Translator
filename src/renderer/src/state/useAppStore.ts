@@ -1,10 +1,6 @@
 import { create } from 'zustand'
+import type { AppConfigBridge } from '../../../shared/app-config-bridge'
 import { defaultAppConfig, type AppConfig } from '../../../shared/config'
-
-type AppConfigBridge = {
-  load: () => Promise<AppConfig>
-  save: (config: AppConfig) => Promise<AppConfig>
-}
 
 type AppStore = {
   config: AppConfig

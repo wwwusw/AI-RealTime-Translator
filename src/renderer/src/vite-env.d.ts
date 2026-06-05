@@ -1,13 +1,10 @@
 /// <reference types="vite/client" />
 
-import type { AppConfig } from '../../shared/config'
+import type { AppConfigBridge } from '../../shared/app-config-bridge'
 
 declare global {
   interface Window {
-    appConfig?: {
-      load: () => Promise<AppConfig>
-      save: (config: AppConfig) => Promise<AppConfig>
-    }
+    appConfig?: AppConfigBridge
   }
 }
 
