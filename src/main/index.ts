@@ -1,12 +1,13 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
+import { getPreloadPath } from './paths'
 
 const createWindow = async () => {
   const window = new BrowserWindow({
     width: 1280,
     height: 860,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js')
+      preload: getPreloadPath(__dirname)
     }
   })
 

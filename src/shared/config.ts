@@ -28,10 +28,13 @@ export const defaultAppConfig: AppConfig = appConfigSchema.parse({})
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
 
+const getNestedRecord = (value: unknown): Record<string, unknown> =>
+  isRecord(value) ? value : {}
+
 export const mergeConfig = (value: unknown): AppConfig => {
-  const partial = isRecord(value) ? value : {}
-  const translation = isRecord(partial.translation) ? partial.translation : {}
-  const asr = isRecord(partial.asr) ? partial.asr : {}
+  const partial = getNestedRecord(value)
+  const translation = getNestedRecord(partial.translation)
+  const asr = getNestedRecord(partial.asr)
 
   return appConfigSchema.parse({
     ...defaultAppConfig,
