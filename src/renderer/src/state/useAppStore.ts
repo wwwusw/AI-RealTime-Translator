@@ -95,6 +95,15 @@ const createMockSubtitles = (): TimelineSubtitle[] => [
     chinese: '演示字幕：这一行用于展示修订中的草稿样式。',
     status: 'draft',
     revisionCount: 1
+  },
+  {
+    id: 'timeline-3',
+    startMs: 6100,
+    endMs: 8800,
+    english: 'Mock line: this row stays stable to preview the final subtitle state.',
+    chinese: '演示字幕：这一行保持稳定，用于展示最终字幕状态。',
+    status: 'final',
+    revisionCount: 0
   }
 ]
 

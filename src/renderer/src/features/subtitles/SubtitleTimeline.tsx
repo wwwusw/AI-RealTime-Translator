@@ -29,13 +29,11 @@ export function SubtitleTimeline({ subtitles, timelineMode }: SubtitleTimelinePr
         </p>
       </div>
       {subtitles.length === 0 ? (
-        <p className="timeline-empty">
-          Timeline empty state. No subtitle events have arrived yet.
-        </p>
+        <p className="timeline-empty">Timeline empty state. No subtitle events have arrived yet.</p>
       ) : (
         <ol className="timeline-list">
           {subtitles.map((line) => {
-            const stateLabel = line.status === 'final' ? 'Stable' : 'Processing'
+            const stateLabel = line.status === 'final' ? '已稳定' : '处理中'
             const isRevised = line.revisionCount > 0
 
             return (
@@ -52,9 +50,7 @@ export function SubtitleTimeline({ subtitles, timelineMode }: SubtitleTimelinePr
                 <p className="timeline-chinese">{line.chinese}</p>
                 <p className="timeline-english">{line.english}</p>
                 {isMock ? <p className="timeline-revision">mock timeline</p> : null}
-                {isRevised ? (
-                  <p className="timeline-revision">Revision count: {line.revisionCount}</p>
-                ) : null}
+                {isRevised ? <p className="timeline-revision">Revision count: {line.revisionCount}</p> : null}
               </li>
             )
           })}

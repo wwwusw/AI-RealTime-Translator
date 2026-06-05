@@ -22,11 +22,20 @@ const demoSubtitles: TimelineSubtitle[] = [
     chinese: '模型已经把这句修订得更清楚。',
     status: 'draft',
     revisionCount: 2
+  },
+  {
+    id: 'line-3',
+    startMs: 5600,
+    endMs: 8600,
+    english: 'This sentence is already stable in the mock timeline.',
+    chinese: '这句字幕在演示时间轴中已经稳定。',
+    status: 'final',
+    revisionCount: 0
   }
 ]
 
 describe('SubtitleTimeline', () => {
-  it('renders chinese-first subtitle rows with draft states and revised highlights', () => {
+  it('renders chinese-first subtitle rows with chinese draft and final state labels', () => {
     const html = renderToStaticMarkup(
       createElement(SubtitleTimeline, {
         subtitles: demoSubtitles,
@@ -37,7 +46,8 @@ describe('SubtitleTimeline', () => {
     expect(html).toContain('mock timeline')
     expect(html).toContain('欢迎回到实时工作台。')
     expect(html).toContain('Welcome back to the live workspace.')
-    expect(html).toContain('Processing')
+    expect(html).toContain('处理中')
+    expect(html).toContain('已稳定')
     expect(html).toContain('timeline-item timeline-item-revised')
   })
 
