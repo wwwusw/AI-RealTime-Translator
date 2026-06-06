@@ -7,10 +7,10 @@ export const translationConfigSchema = z.object({
 })
 
 export const asrConfigSchema = z.object({
-  provider: z.enum(['scripted', 'openai-audio']).default('scripted'),
-  baseUrl: z.string().url().default('https://api.openai.com/v1'),
+  provider: z.enum(['scripted', 'openai-audio', 'dashscope-realtime']).default('scripted'),
+  baseUrl: z.string().url().default('wss://dashscope.aliyuncs.com/api-ws/v1/realtime'),
   apiKey: z.string().default(''),
-  model: z.string().min(1).default('gpt-4o-mini-transcribe')
+  model: z.string().min(1).default('qwen3-asr-flash-realtime')
 })
 
 export const appConfigSchema = z.object({

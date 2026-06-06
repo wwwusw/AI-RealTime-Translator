@@ -9,7 +9,9 @@ const createWindow = async () => {
     width: 1280,
     height: 860,
     webPreferences: {
-      preload: getPreloadPath(__dirname)
+      preload: getPreloadPath(__dirname),
+      contextIsolation: true,
+      sandbox: false
     }
   })
 

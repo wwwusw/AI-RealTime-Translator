@@ -9,6 +9,7 @@ import './styles.css'
 export default function App() {
   const config = useAppStore((state) => state.config)
   const hydrateConfig = useAppStore((state) => state.hydrateConfig)
+  const saveConfig = useAppStore((state) => state.saveConfig)
   const filePath = useAppStore((state) => state.filePath)
   const canStart = useAppStore((state) => state.canStart)
   const isRunning = useAppStore((state) => state.isRunning)
@@ -51,12 +52,7 @@ export default function App() {
         lastRevisionSummary={lastRevisionSummary}
       />
       <SubtitleTimeline subtitles={subtitles} timelineMode={timelineMode} />
-      <SettingsPanel
-        asrProvider={config.asr.provider}
-        translationBaseUrl={config.translation.baseUrl}
-        translationModel={config.translation.model}
-        hasTranslationApiKey={config.translation.apiKey.trim().length > 0}
-      />
+      <SettingsPanel config={config} onSave={saveConfig} />
     </main>
   )
 }

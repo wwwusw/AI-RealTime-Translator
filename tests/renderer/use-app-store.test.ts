@@ -233,4 +233,68 @@ describe('useAppStore task controls', () => {
     expect(useAppStore.getState().timelineMode).toBe('live')
     expect(useAppStore.getState().subtitles).toEqual([])
   })
+
+  it('persists provider configuration changes through the config bridge', async () => {
+    const save = vi.fn().mockImplementation(async (config) => config)
+
+    window.appConfig = {
+      load: vi.fn().mockResolvedValue(defaultAppConfig),
+      save
+    }
+    window.pipelineTasks = {
+      pickMediaFile: vi.fn().mockResolvedValue(null),
+      getTaskStatus: vi.fn().mockResolvedValue(createStatus()),
+      startTask: vi.fn().mockResolvedValue(createStatus()),
+      pauseTask: vi.fn().mockResolvedValue(createStatus()),
+      resetTask: vi.fn().mockResolvedValue(createStatus())
+    }
+
+    const { useAppStore } = await import('../../src/renderer/src/state/useAppStore')
+
+    const nextConfig = {
+      ...defaultAppConfig,
+      asr: {
+        provider: 'dashscope-realtime' as const,
+        baseUrl: 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime',
+        apiKey: 'dashscope-key',
+        model: 'qwen3-asr-flash-realtime'
+      }
+    }
+
+    await useAppStore.getState().saveConfig(nextConfig)
+
+    expect(save).toHaveBeenCalledWith(nextConfig)
+    expect(useAppStore.getState().config.asr.provider).toBe('dashscope-realtime')
+  })
+
+  it('surfaces a bridge error instead of silently doing nothing when file picking fails', async () => {
+    window.appConfig = {
+      load: vi.fn().mockResolvedValue(defaultAppConfig),
+      save: vi.fn().mockResolvedValue(defaultAppConfig)
+    }
+    window.pipelineTasks = {
+      pickMediaFile: vi.fn().mockRejectedValue(new Error('dialog failed')),
+      getTaskStatus: vi.fn().mockResolvedValue(createStatus()),
+      startTask: vi.fn().mockResolvedValue(createStatus()),
+      pauseTask: vi.fn().mockResolvedValue(createStatus()),
+      resetTask: vi.fn().mockResolvedValue(createStatus())
+    }
+
+    const { useAppStore } = await import('../../src/renderer/src/state/useAppStore')
+
+    await useAppStore.getState().pick()
+    expect(useAppStore.getState().lastRevisionSummary).toBe('File selection failed: dialog failed')
+  })
+
+  it('marks the desktop bridge as unavailable instead of silently no-oping outside Electron', async () => {
+    window.appConfig = undefined
+    window.pipelineTasks = undefined
+
+    const { useAppStore } = await import('../../src/renderer/src/state/useAppStore')
+
+    await useAppStore.getState().pick()
+    expect(useAppStore.getState().lastRevisionSummary).toBe(
+      'Desktop bridge unavailable. Start the app through Electron.'
+    )
+  })
 })

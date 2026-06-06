@@ -3,6 +3,7 @@ import { pipelineTaskChannels } from '../../src/shared/pipeline'
 
 const handlers = new Map<string, (...args: unknown[]) => unknown>()
 const browserWindowSendMock = vi.fn()
+const browserWindowFromWebContentsMock = vi.fn()
 
 const loadConfigMock = vi.fn()
 const pickMediaFileMock = vi.fn()
@@ -10,10 +11,12 @@ const runPipelineMock = vi.fn()
 const preparePipelineChunksMock = vi.fn()
 const createScriptedAsrProviderMock = vi.fn()
 const createOpenAiAudioAsrProviderMock = vi.fn()
+const createDashScopeRealtimeAsrProviderMock = vi.fn()
 const createOpenAiChatTranslationProviderMock = vi.fn()
 
 vi.mock('electron', () => ({
   BrowserWindow: {
+    fromWebContents: browserWindowFromWebContentsMock,
     getAllWindows: vi.fn(() => [
       {
         webContents: {
@@ -51,6 +54,10 @@ vi.mock('../../src/main/services/providers/scripted-asr-provider', () => ({
 
 vi.mock('../../src/main/services/providers/openai-audio-asr-provider', () => ({
   createOpenAiAudioAsrProvider: createOpenAiAudioAsrProviderMock
+}))
+
+vi.mock('../../src/main/services/providers/dashscope-realtime-asr-provider', () => ({
+  createDashScopeRealtimeAsrProvider: createDashScopeRealtimeAsrProviderMock
 }))
 
 vi.mock('../../src/main/services/providers/openai-chat-translation-provider', () => ({
@@ -109,6 +116,9 @@ describe('registerTaskHandlers', () => {
     })
     createOpenAiAudioAsrProviderMock.mockReturnValue({
       transcribeChunk: vi.fn().mockResolvedValue('hello conference')
+    })
+    createDashScopeRealtimeAsrProviderMock.mockReturnValue({
+      transcribeChunk: vi.fn().mockResolvedValue('hello conference from dashscope')
     })
     createOpenAiChatTranslationProviderMock.mockReturnValue({
       translateBatch: vi.fn().mockResolvedValue([{ id: 'chunk-0', chinese: 'draft translation' }]),
@@ -229,6 +239,63 @@ describe('registerTaskHandlers', () => {
       pipelineTaskChannels.pipelineEvent,
       expect.objectContaining({ type: 'subtitle-revised' })
     )
+  })
+
+  it('selects the DashScope realtime ASR provider when configured', async () => {
+    loadConfigMock.mockReturnValue({
+      translation: {
+        baseUrl: 'https://api.deepseek.com',
+        apiKey: 'translation-key',
+        model: 'deepseek-v4-flash'
+      },
+      asr: {
+        provider: 'dashscope-realtime',
+        baseUrl: 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime',
+        apiKey: 'dashscope-key',
+        model: 'qwen3-asr-flash-realtime'
+      },
+      revisionWindowSize: 4,
+      chunkDurationMs: 5000,
+      chunkOverlapMs: 1000
+    })
+    runPipelineMock.mockResolvedValue([])
+
+    const { registerTaskHandlers } = await import('../../src/main/ipc/tasks')
+    registerTaskHandlers()
+
+    const startTask = handlers.get(pipelineTaskChannels.startTask)
+    await startTask?.({}, 'fixtures/input.wav')
+
+    expect(createDashScopeRealtimeAsrProviderMock).toHaveBeenCalledWith({
+      baseUrl: 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime',
+      apiKey: 'dashscope-key',
+      model: 'qwen3-asr-flash-realtime'
+    })
+    expect(createOpenAiAudioAsrProviderMock).not.toHaveBeenCalled()
+    expect(createScriptedAsrProviderMock).not.toHaveBeenCalled()
+  })
+
+  it('opens the file picker for the sender window and stores the selected file as ready', async () => {
+    const senderWindow = { id: 1 }
+    browserWindowFromWebContentsMock.mockReturnValue(senderWindow)
+
+    const { registerTaskHandlers } = await import('../../src/main/ipc/tasks')
+    registerTaskHandlers()
+
+    const pickTask = handlers.get(pipelineTaskChannels.pickMediaFile)
+    const getTaskStatus = handlers.get(pipelineTaskChannels.getTaskStatus)
+
+    const file = await pickTask?.({ sender: { id: 'web-contents' } })
+
+    expect(browserWindowFromWebContentsMock).toHaveBeenCalledWith({ id: 'web-contents' })
+    expect(pickMediaFileMock).toHaveBeenCalledWith(senderWindow)
+    expect(file).toEqual({ filePath: 'fixtures/input.wav' })
+    await expect(getTaskStatus?.()).resolves.toMatchObject({
+      filePath: 'fixtures/input.wav',
+      stage: 'ready',
+      canStart: true,
+      lastRevisionSummary: 'File selected. Ready to start the task.'
+    })
   })
 
   it('aborts the in-flight pipeline on pause and reset, and does not start twice', async () => {

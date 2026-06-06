@@ -11,6 +11,7 @@ import { loadConfig } from '../services/config-store'
 import { pickMediaFile } from '../services/file-picker'
 import { preparePipelineChunks } from '../services/pipeline-media-prep'
 import { runPipeline } from '../services/pipeline-runner'
+import { createDashScopeRealtimeAsrProvider } from '../services/providers/dashscope-realtime-asr-provider'
 import { createOpenAiAudioAsrProvider } from '../services/providers/openai-audio-asr-provider'
 import { createOpenAiChatTranslationProvider } from '../services/providers/openai-chat-translation-provider'
 import { createScriptedAsrProvider } from '../services/providers/scripted-asr-provider'
@@ -43,17 +44,28 @@ const createIdleTaskStatus = (summary = 'No task has run yet.'): PipelineTaskSta
     lastRevisionSummary: summary
   })
 
-const createAsrProvider = (config: AppConfig) =>
-  config.asr.provider === 'openai-audio'
-    ? createOpenAiAudioAsrProvider({
+const createAsrProvider = (config: AppConfig) => {
+  switch (config.asr.provider) {
+    case 'openai-audio':
+      return createOpenAiAudioAsrProvider({
         baseUrl: config.asr.baseUrl,
         apiKey: config.asr.apiKey,
         model: config.asr.model
       })
-    : createScriptedAsrProvider({
+    case 'dashscope-realtime':
+      return createDashScopeRealtimeAsrProvider({
+        baseUrl: config.asr.baseUrl,
+        apiKey: config.asr.apiKey,
+        model: config.asr.model
+      })
+    case 'scripted':
+    default:
+      return createScriptedAsrProvider({
         getEnglishByChunk: async ({ chunkIndex, filePath }) =>
           `Scripted transcript ${chunkIndex + 1} from ${basename(filePath)}`
       })
+  }
+}
 
 const createRevisionSummary = (event: PipelineEvent): string | null => {
   switch (event.type) {
@@ -184,8 +196,9 @@ const startPipelineRun = (filePath: string, config: AppConfig): PipelineTaskStat
 }
 
 export const registerTaskHandlers = () => {
-  ipcMain.handle(pipelineTaskChannels.pickMediaFile, async () => {
-    const file = await pickMediaFile()
+  ipcMain.handle(pipelineTaskChannels.pickMediaFile, async (event) => {
+    const parentWindow = BrowserWindow.fromWebContents(event.sender)
+    const file = await pickMediaFile(parentWindow)
 
     if (file) {
       setTaskStatus(
