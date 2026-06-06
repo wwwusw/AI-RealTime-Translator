@@ -25,6 +25,24 @@ export function SettingsPanel({ config, onSave }: SettingsPanelProps) {
         }}
       >
         <label className="settings-field">
+          <span>Input Mode</span>
+          <select
+            name="input-mode"
+            value={draftConfig.inputMode}
+            onChange={(event) => {
+              const inputMode = event.target.value as AppConfig['inputMode']
+              setDraftConfig((currentConfig) => ({
+                ...currentConfig,
+                inputMode
+              }))
+            }}
+          >
+            <option value="file">file</option>
+            <option value="system-audio">system-audio</option>
+          </select>
+        </label>
+
+        <label className="settings-field">
           <span>ASR Provider</span>
           <select
             name="asr-provider"

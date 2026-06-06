@@ -28,14 +28,14 @@ const demoSubtitles: TimelineSubtitle[] = [
     startMs: 5600,
     endMs: 8600,
     english: 'This sentence is already stable in the live timeline.',
-    chinese: '这句字幕在实时时间轴中已经稳定。',
+    chinese: '这条字幕已经稳定。',
     status: 'final',
     revisionCount: 0
   }
 ]
 
 describe('SubtitleTimeline', () => {
-  it('renders chinese-first subtitle rows with chinese draft and final state labels', () => {
+  it('renders chinese-first subtitle rows with draft and stable state labels', () => {
     const html = renderToStaticMarkup(
       createElement(SubtitleTimeline, {
         subtitles: demoSubtitles,
@@ -46,8 +46,8 @@ describe('SubtitleTimeline', () => {
     expect(html).toContain('Timeline updates from real pipeline events.')
     expect(html).toContain('欢迎回到实时工作台。')
     expect(html).toContain('Welcome back to the live workspace.')
-    expect(html).toContain('处理中')
-    expect(html).toContain('已稳定')
+    expect(html).toContain('Draft')
+    expect(html).toContain('Stable')
     expect(html).toContain('timeline-item timeline-item-revised')
   })
 
@@ -61,5 +61,27 @@ describe('SubtitleTimeline', () => {
 
     expect(html).toContain('empty state')
     expect(html).toContain('No subtitle events have arrived yet.')
+  })
+
+  it('renders capture placeholders for pending subtitles', () => {
+    const html = renderToStaticMarkup(
+      createElement(SubtitleTimeline, {
+        subtitles: [
+          {
+            id: 'pending',
+            startMs: 0,
+            endMs: 3000,
+            english: '',
+            chinese: '',
+            status: 'draft',
+            revisionCount: 0
+          }
+        ],
+        timelineMode: 'live'
+      })
+    )
+
+    expect(html).toContain('Waiting for translation...')
+    expect(html).toContain('Listening for the next transcript chunk...')
   })
 })

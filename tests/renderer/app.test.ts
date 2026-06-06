@@ -8,7 +8,7 @@ describe('App', () => {
     const html = renderToStaticMarkup(createElement(App))
 
     expect(html).toContain('AI RealTime Translator')
-    expect(html).toContain('subtitle event stream')
+    expect(html).toContain('live system audio')
     expect(html).toContain('No media file selected yet.')
     expect(html).toContain('empty state')
     expect(html).not.toContain('Revision count:')
@@ -18,6 +18,8 @@ describe('App', () => {
     const html = renderToStaticMarkup(createElement(App))
 
     expect(html).toContain('Provider Settings')
+    expect(html).toContain('Input Mode')
+    expect(html).toContain('system-audio')
     expect(html).toContain('ASR Provider')
     expect(html).toContain('scripted')
     expect(html).toContain('ASR Base URL')

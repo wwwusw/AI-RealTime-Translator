@@ -34,9 +34,11 @@ describe('runPipeline', () => {
       }
     })
 
+    const pendingEvent = events.find((event) => event.type === 'subtitle-pending')
     const addedEvent = events.find((event) => event.type === 'subtitle-added')
     const revisedEvent = events.find((event) => event.type === 'subtitle-revised')
 
+    expect(pendingEvent).toBeDefined()
     expect(addedEvent).toBeDefined()
     expect(revisedEvent).toBeDefined()
     expect(revisedEvent).not.toHaveProperty('chunk')
@@ -71,12 +73,8 @@ describe('runPipeline', () => {
     const signal = new AbortController().signal
     const chunks = [{ index: 0, startMs: 0, endMs: 5_000, filePath: 'chunk-0.wav' }]
     const transcribeChunk = vi.fn().mockResolvedValue('hello world')
-    const translateBatch = vi
-      .fn()
-      .mockResolvedValue([{ id: 'chunk-0', chinese: '你好，世界' }])
-    const reviseBatch = vi
-      .fn()
-      .mockResolvedValue([{ id: 'chunk-0', chinese: '你好，世界' }])
+    const translateBatch = vi.fn().mockResolvedValue([{ id: 'chunk-0', chinese: '你好，世界' }])
+    const reviseBatch = vi.fn().mockResolvedValue([{ id: 'chunk-0', chinese: '你好，世界' }])
 
     await runPipeline({
       chunks,
@@ -106,5 +104,30 @@ describe('runPipeline', () => {
       [{ id: 'chunk-0', english: 'hello world', chinese: '你好，世界' }],
       signal
     )
+  })
+
+  it('skips subtitle creation when realtime asr returns an empty transcript', async () => {
+    const events: PipelineEvent[] = []
+    const translateBatch = vi.fn()
+    const reviseBatch = vi.fn()
+
+    const subtitles = await runPipeline({
+      chunks: [{ index: 0, startMs: 0, endMs: 5_000, filePath: 'chunk-0.wav' }],
+      asrProvider: {
+        transcribeChunk: vi.fn().mockResolvedValue('')
+      },
+      translationProvider: {
+        translateBatch,
+        reviseBatch
+      },
+      emitEvent: (event) => {
+        events.push(event)
+      }
+    })
+
+    expect(events.map((event) => event.type)).toEqual(['subtitle-pending', 'pipeline-completed'])
+    expect(translateBatch).not.toHaveBeenCalled()
+    expect(reviseBatch).not.toHaveBeenCalled()
+    expect(subtitles).toEqual([])
   })
 })

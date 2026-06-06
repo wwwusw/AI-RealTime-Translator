@@ -16,6 +16,7 @@ describe('README', () => {
     expect(readme).toContain('model')
     expect(readme).toContain('npm install')
     expect(readme).toContain('npm run dev')
+    expect(readme).toContain('subtitle-pending')
     expect(readme).toContain('subtitle-added')
     expect(readme).toContain('subtitle-revised')
     expect(readme).toContain('local file input')

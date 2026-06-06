@@ -7,7 +7,7 @@ describe('App source', () => {
     const source = readFileSync(resolve('src/renderer/src/App.tsx'), 'utf8')
 
     expect(source).toContain('AI RealTime Translator')
-    expect(source).toContain('subtitle event stream')
+    expect(source).toContain('live system audio')
     expect(source).toContain('SubtitleTimeline')
   })
 })

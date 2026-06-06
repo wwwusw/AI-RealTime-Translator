@@ -1,4 +1,5 @@
 type StatusBarProps = {
+  inputMode: 'file' | 'system-audio'
   translationModel: string
   asrProvider: string
   stageLabel: string
@@ -6,6 +7,7 @@ type StatusBarProps = {
 }
 
 export function StatusBar({
+  inputMode,
   translationModel,
   asrProvider,
   stageLabel,
@@ -21,6 +23,10 @@ export function StatusBar({
         <div>
           <dt>ASR Provider</dt>
           <dd>{asrProvider}</dd>
+        </div>
+        <div>
+          <dt>Input Mode</dt>
+          <dd>{inputMode}</dd>
         </div>
         <div>
           <dt>Stage</dt>

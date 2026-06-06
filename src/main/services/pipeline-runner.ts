@@ -13,12 +13,15 @@ import {
 } from '../../shared/subtitles'
 
 type RunPipelineOptions = {
-  chunks: PlannedChunk[]
   asrProvider: AsrProvider
   translationProvider: TranslationProvider
   emitEvent: (event: PipelineEvent) => void
   revisionWindowSize?: number
   signal?: AbortSignal
+}
+
+type ProcessChunkOptions = {
+  chunk: PlannedChunk
 }
 
 const getChunkFilePath = (chunk: PlannedChunk): string => {
@@ -57,24 +60,42 @@ const mapValidatedResults = (
   return chineseById
 }
 
-export const runPipeline = async ({
-  chunks,
+export const createPipelineProcessor = ({
   asrProvider,
   translationProvider,
   emitEvent,
   revisionWindowSize = 2,
   signal
-}: RunPipelineOptions): Promise<SubtitleLine[]> => {
+}: RunPipelineOptions) => {
   let subtitles: SubtitleLine[] = []
 
-  for (const chunk of chunks) {
+  const processChunk = async ({ chunk }: ProcessChunkOptions): Promise<SubtitleLine> => {
     signal?.throwIfAborted?.()
+    const subtitleId = `chunk-${chunk.index}`
+    emitEvent({
+      type: 'subtitle-pending',
+      chunk,
+      subtitle: createSubtitle({
+        id: subtitleId,
+        english: '',
+        chinese: ''
+      })
+    })
+
     const english = await asrProvider.transcribeChunk({
       chunkIndex: chunk.index,
       filePath: getChunkFilePath(chunk)
     }, signal)
     signal?.throwIfAborted?.()
-    const subtitleId = `chunk-${chunk.index}`
+
+    if (english.trim().length === 0) {
+      return createSubtitle({
+        id: subtitleId,
+        english: '',
+        chinese: ''
+      })
+    }
+
     const draftSubtitle: TranslationProviderSubtitle = {
       id: subtitleId,
       english,
@@ -137,12 +158,35 @@ export const runPipeline = async ({
         subtitle: revisedSubtitle
       })
     }
+
+    return subtitle
   }
 
-  emitEvent({
-    type: 'pipeline-completed',
-    subtitles
-  })
+  const complete = (): SubtitleLine[] => {
+    emitEvent({
+      type: 'pipeline-completed',
+      subtitles
+    })
 
-  return subtitles
+    return subtitles
+  }
+
+  return {
+    processChunk,
+    complete,
+    getSubtitles: () => subtitles
+  }
+}
+
+export const runPipeline = async ({
+  chunks,
+  ...options
+}: RunPipelineOptions & { chunks: PlannedChunk[] }): Promise<SubtitleLine[]> => {
+  const processor = createPipelineProcessor(options)
+
+  for (const chunk of chunks) {
+    await processor.processChunk({ chunk })
+  }
+
+  return processor.complete()
 }

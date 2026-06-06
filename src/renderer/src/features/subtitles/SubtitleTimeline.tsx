@@ -19,10 +19,11 @@ export function SubtitleTimeline({ subtitles, timelineMode }: SubtitleTimelinePr
       <div className="timeline-header">
         <div>
           <p className="eyebrow">Subtitle Timeline</p>
-          <h2>字幕时间轴</h2>
+          <h2>Live revision window</h2>
         </div>
         <p className="timeline-caption">
-          中文优先显示，英文保留为辅助参考。{timelineMode === 'live' ? ' Timeline updates from real pipeline events.' : ''}
+          Chinese stays first, English remains visible for verification.
+          {timelineMode === 'live' ? ' Timeline updates from real pipeline events.' : ''}
         </p>
       </div>
       {subtitles.length === 0 ? (
@@ -30,7 +31,7 @@ export function SubtitleTimeline({ subtitles, timelineMode }: SubtitleTimelinePr
       ) : (
         <ol className="timeline-list">
           {subtitles.map((line) => {
-            const stateLabel = line.status === 'final' ? '已稳定' : '处理中'
+            const stateLabel = line.status === 'final' ? 'Stable' : 'Draft'
             const isRevised = line.revisionCount > 0
 
             return (
@@ -44,8 +45,10 @@ export function SubtitleTimeline({ subtitles, timelineMode }: SubtitleTimelinePr
                   </span>
                   <span className={`timeline-state timeline-state-${line.status}`}>{stateLabel}</span>
                 </div>
-                <p className="timeline-chinese">{line.chinese}</p>
-                <p className="timeline-english">{line.english}</p>
+                <p className="timeline-chinese">{line.chinese || 'Waiting for translation...'}</p>
+                <p className="timeline-english">
+                  {line.english || 'Listening for the next transcript chunk...'}
+                </p>
                 {isRevised ? <p className="timeline-revision">Revision count: {line.revisionCount}</p> : null}
               </li>
             )

@@ -14,6 +14,7 @@ export const asrConfigSchema = z.object({
 })
 
 export const appConfigSchema = z.object({
+  inputMode: z.enum(['file', 'system-audio']).default('file'),
   translation: translationConfigSchema.default({}),
   asr: asrConfigSchema.default({}),
   revisionWindowSize: z.number().int().min(1).max(6).default(4),
