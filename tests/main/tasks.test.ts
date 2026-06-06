@@ -13,6 +13,8 @@ const createScriptedAsrProviderMock = vi.fn()
 const createOpenAiAudioAsrProviderMock = vi.fn()
 const createDashScopeRealtimeAsrProviderMock = vi.fn()
 const createOpenAiChatTranslationProviderMock = vi.fn()
+const createOpenAiChatRefinementProviderMock = vi.fn()
+const createQwenLiveTranslateRealtimeProviderMock = vi.fn()
 const createSystemAudioPipelineSessionMock = vi.fn()
 
 vi.mock('electron', () => ({
@@ -62,7 +64,12 @@ vi.mock('../../src/main/services/providers/dashscope-realtime-asr-provider', () 
 }))
 
 vi.mock('../../src/main/services/providers/openai-chat-translation-provider', () => ({
-  createOpenAiChatTranslationProvider: createOpenAiChatTranslationProviderMock
+  createOpenAiChatTranslationProvider: createOpenAiChatTranslationProviderMock,
+  createOpenAiChatRefinementProvider: createOpenAiChatRefinementProviderMock
+}))
+
+vi.mock('../../src/main/services/providers/qwen-live-translate-realtime-provider', () => ({
+  createQwenLiveTranslateRealtimeProvider: createQwenLiveTranslateRealtimeProviderMock
 }))
 
 vi.mock('../../src/main/services/system-audio-session', () => ({
@@ -83,7 +90,7 @@ describe('registerTaskHandlers', () => {
 
     loadConfigMock.mockReturnValue({
       inputMode: 'file',
-      translation: {
+      refiner: {
         baseUrl: 'https://api.deepseek.com',
         apiKey: 'translation-key',
         model: 'deepseek-v4-flash'
@@ -94,7 +101,15 @@ describe('registerTaskHandlers', () => {
         apiKey: 'asr-key',
         model: 'gpt-4o-mini-transcribe'
       },
+      liveTranslate: {
+        baseUrl: 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime',
+        apiKey: 'live-translate-key',
+        model: 'qwen3.5-livetranslate-flash-realtime',
+        sourceLanguage: 'en',
+        targetLanguage: 'zh'
+      },
       revisionWindowSize: 4,
+      blockDurationMs: 2000,
       chunkDurationMs: 5000,
       chunkOverlapMs: 1000
     })
@@ -129,6 +144,12 @@ describe('registerTaskHandlers', () => {
     createOpenAiChatTranslationProviderMock.mockReturnValue({
       translateBatch: vi.fn().mockResolvedValue([{ id: 'chunk-0', chinese: 'draft translation' }]),
       reviseBatch: vi.fn().mockResolvedValue([{ id: 'chunk-0', chinese: 'revised translation' }])
+    })
+    createOpenAiChatRefinementProviderMock.mockReturnValue({
+      refineBlocks: vi.fn().mockResolvedValue([])
+    })
+    createQwenLiveTranslateRealtimeProviderMock.mockReturnValue({
+      startSession: vi.fn()
     })
     createSystemAudioPipelineSessionMock.mockResolvedValue({
       appendChunk: vi.fn().mockResolvedValue(undefined),
@@ -278,7 +299,7 @@ describe('registerTaskHandlers', () => {
   it('selects the DashScope realtime ASR provider when configured', async () => {
     loadConfigMock.mockReturnValue({
       inputMode: 'file',
-      translation: {
+      refiner: {
         baseUrl: 'https://api.deepseek.com',
         apiKey: 'translation-key',
         model: 'deepseek-v4-flash'
@@ -313,18 +334,26 @@ describe('registerTaskHandlers', () => {
   it('starts a system-audio session and forwards captured chunks to the streaming pipeline', async () => {
     loadConfigMock.mockReturnValue({
       inputMode: 'system-audio',
-      translation: {
+      refiner: {
         baseUrl: 'https://api.deepseek.com',
         apiKey: 'translation-key',
         model: 'deepseek-v4-flash'
       },
       asr: {
-        provider: 'dashscope-realtime',
+        provider: 'scripted',
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: '',
+        model: 'unused-for-system-audio'
+      },
+      liveTranslate: {
         baseUrl: 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime',
         apiKey: 'dashscope-key',
-        model: 'qwen3-asr-flash-realtime'
+        model: 'qwen3.5-livetranslate-flash-realtime',
+        sourceLanguage: 'en',
+        targetLanguage: 'zh'
       },
       revisionWindowSize: 4,
+      blockDurationMs: 2000,
       chunkDurationMs: 5000,
       chunkOverlapMs: 1000
     })
@@ -364,14 +393,21 @@ describe('registerTaskHandlers', () => {
       isRunning: false,
       canStart: true
     })
-    expect(createDashScopeRealtimeAsrProviderMock).toHaveBeenCalledWith({
+    expect(createQwenLiveTranslateRealtimeProviderMock).toHaveBeenCalledWith({
       baseUrl: 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime',
       apiKey: 'dashscope-key',
-      model: 'qwen3-asr-flash-realtime'
+      model: 'qwen3.5-livetranslate-flash-realtime',
+      sourceLanguage: 'en',
+      targetLanguage: 'zh'
+    })
+    expect(createOpenAiChatRefinementProviderMock).toHaveBeenCalledWith({
+      baseUrl: 'https://api.deepseek.com',
+      apiKey: 'translation-key',
+      model: 'deepseek-v4-flash'
     })
     expect(createSystemAudioPipelineSessionMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        revisionWindowSize: 4,
+        blockDurationMs: 2000,
         signal: expect.any(AbortSignal)
       })
     )

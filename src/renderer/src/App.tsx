@@ -16,7 +16,7 @@ export default function App() {
   const isRunning = useAppStore((state) => state.isRunning)
   const stageLabel = useAppStore((state) => state.stageLabel)
   const lastRevisionSummary = useAppStore((state) => state.lastRevisionSummary)
-  const subtitles = useAppStore((state) => state.subtitles)
+  const subtitleBlocks = useAppStore((state) => state.subtitleBlocks)
   const timelineMode = useAppStore((state) => state.timelineMode)
   const pick = useAppStore((state) => state.pick)
   const start = useAppStore((state) => state.start)
@@ -49,12 +49,13 @@ export default function App() {
       />
       <StatusBar
         inputMode={config.inputMode}
-        translationModel={config.translation.model}
+        liveTranslateModel={config.liveTranslate.model}
+        refinerModel={config.refiner.model}
         asrProvider={config.asr.provider}
         stageLabel={stageLabel}
         lastRevisionSummary={lastRevisionSummary}
       />
-      <SubtitleTimeline subtitles={subtitles} timelineMode={timelineMode} />
+      <SubtitleTimeline subtitleBlocks={subtitleBlocks} timelineMode={timelineMode} />
       <SettingsPanel config={config} onSave={saveConfig} />
     </main>
   )

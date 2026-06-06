@@ -1,20 +1,28 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { extname, join } from 'node:path'
-import type {
-  PipelineEvent,
-  PlannedChunk,
-  SystemAudioChunkPayload
+import {
+  SUBTITLE_BLOCK_PENDING_BATCH_SIZE,
+  SUBTITLE_BLOCK_REFINED_CONTEXT_SIZE,
+  SUBTITLE_BLOCK_WINDOW_SIZE,
+  type PipelineEvent,
+  type SubtitleBlock,
+  type SubtitleBlockStatus,
+  type SystemAudioChunkPayload
 } from '../../shared/pipeline'
-import type { AsrProvider, TranslationProvider } from '../../shared/providers'
-import { createPipelineProcessor } from './pipeline-runner'
-import { normalizeAudioToMono16kWav } from './ffmpeg-service'
+import type {
+  LiveTranslateProvider,
+  LiveTranslateStreamEvent,
+  LiveTranslateSession,
+  RefinementProvider,
+  SubtitleBlockRefinementInput,
+  SubtitleBlockRefinementResult
+} from '../../shared/providers'
 
 type SystemAudioSessionOptions = {
-  asrProvider: AsrProvider
-  translationProvider: TranslationProvider
+  liveTranslateProvider: LiveTranslateProvider
+  refinementProvider: RefinementProvider
   emitEvent: (event: PipelineEvent) => void
-  revisionWindowSize?: number
+  blockDurationMs: number
+  sourceLanguage?: string
+  targetLanguage: string
   signal?: AbortSignal
 }
 
@@ -24,107 +32,324 @@ export type SystemAudioPipelineSession = {
   abort: () => Promise<void>
 }
 
-const getExtensionFromMimeType = (mimeType: string): string => {
-  if (mimeType.includes('webm')) {
-    return '.webm'
-  }
-
-  if (mimeType.includes('wav')) {
-    return '.wav'
-  }
-
-  const fallbackExtension = extname(mimeType)
-  return fallbackExtension.length > 0 ? fallbackExtension : '.bin'
+type ManagedBlock = SubtitleBlock & {
+  itemOrder: string[]
+  itemTextById: Map<string, { sourceTranscript: string; liveTranslation: string }>
 }
 
-const isReadyMonoWavPayload = (mimeType: string): boolean => mimeType.includes('audio/wav')
+type ManagedItemBinding = {
+  blockId: string
+}
 
-export const createSystemAudioPipelineSession = async ({
-  asrProvider,
-  translationProvider,
-  emitEvent,
-  revisionWindowSize = 2,
-  signal
-}: SystemAudioSessionOptions): Promise<SystemAudioPipelineSession> => {
-  const workingDirectory = await mkdtemp(join(tmpdir(), 'ai-realtime-system-audio-'))
-  const processor = createPipelineProcessor({
-    asrProvider,
-    translationProvider,
-    emitEvent,
-    revisionWindowSize,
-    signal
-  })
+const createManagedBlock = ({
+  index,
+  startMs,
+  endMs
+}: {
+  index: number
+  startMs: number
+  endMs: number
+}): ManagedBlock => ({
+  id: `block-${index}`,
+  index,
+  startMs,
+  endMs,
+  sourceTranscript: '',
+  liveTranslation: '',
+  refinedTranslation: '',
+  status: 'live',
+  updatedAt: Date.now(),
+  itemOrder: [],
+  itemTextById: new Map()
+})
 
-  let nextChunkIndex = 0
-  let nextStartMs = 0
-  let queue = Promise.resolve()
-  let cleanedUp = false
+const toPublicBlock = ({
+  itemOrder: _itemOrder,
+  itemTextById: _itemTextById,
+  ...block
+}: ManagedBlock): SubtitleBlock => block
 
-  const cleanup = async () => {
-    if (cleanedUp) {
+const buildRefinementInput = (block: ManagedBlock): SubtitleBlockRefinementInput => ({
+  id: block.id,
+  sourceTranscript: block.sourceTranscript,
+  liveTranslation: block.liveTranslation,
+  refinedTranslation: block.refinedTranslation
+})
+
+const createBlocksUpdatedEvent = (blocks: ManagedBlock[]): PipelineEvent => ({
+  type: 'subtitle-blocks-updated',
+  blocks: blocks.map(toPublicBlock)
+})
+
+const trimBlocksWindow = (blocks: ManagedBlock[], itemBindings: Map<string, ManagedItemBinding>) => {
+  while (blocks.length > SUBTITLE_BLOCK_WINDOW_SIZE) {
+    const removedBlock = blocks.shift()
+
+    if (!removedBlock) {
       return
     }
 
-    cleanedUp = true
-    await rm(workingDirectory, { recursive: true, force: true })
+    for (const itemId of removedBlock.itemOrder) {
+      itemBindings.delete(itemId)
+    }
   }
+}
 
-  const queueChunk = async (payload: SystemAudioChunkPayload): Promise<void> => {
-    signal?.throwIfAborted?.()
+const updateBlockText = (block: ManagedBlock) => {
+  const orderedText = block.itemOrder
+    .map((itemId) => block.itemTextById.get(itemId))
+    .filter((value): value is NonNullable<typeof value> => value !== undefined)
 
-    const chunkIndex = nextChunkIndex
-    nextChunkIndex += 1
+  block.sourceTranscript = orderedText
+    .map((value) => value.sourceTranscript.trim())
+    .filter(Boolean)
+    .join(' ')
+    .trim()
+  block.liveTranslation = orderedText
+    .map((value) => value.liveTranslation.trim())
+    .filter(Boolean)
+    .join(' ')
+    .trim()
+  block.updatedAt = Date.now()
+}
 
-    const durationMs = Math.max(1, Math.round(payload.durationMs))
-    const startMs = nextStartMs
-    const endMs = startMs + durationMs
-    nextStartMs = endMs
+const applyRefinementResults = (
+  blocks: ManagedBlock[],
+  results: SubtitleBlockRefinementResult[]
+): boolean => {
+  let changed = false
+  const translatedTextById = new Map(results.map((result) => [result.id, result.translatedText]))
 
-    const sourceExtension = getExtensionFromMimeType(payload.mimeType)
-    const sourcePath = join(workingDirectory, `capture-${chunkIndex}${sourceExtension}`)
-    const normalizedPath = join(workingDirectory, `capture-${chunkIndex}.wav`)
-    const chunk: PlannedChunk = {
-      index: chunkIndex,
-      startMs,
-      endMs,
-      filePath: normalizedPath
+  for (const block of blocks) {
+    const translatedText = translatedTextById.get(block.id)
+
+    if (!translatedText) {
+      continue
     }
 
-    await writeFile(sourcePath, Buffer.from(payload.bytes))
+    block.refinedTranslation = translatedText
+    block.status = 'refined'
+    block.updatedAt = Date.now()
+    changed = true
+  }
 
-    try {
-      if (isReadyMonoWavPayload(payload.mimeType)) {
-        await writeFile(normalizedPath, Buffer.from(payload.bytes))
-      } else {
-        await normalizeAudioToMono16kWav(sourcePath, normalizedPath)
+  return changed
+}
+
+export const createSystemAudioPipelineSession = async ({
+  liveTranslateProvider,
+  refinementProvider,
+  emitEvent,
+  blockDurationMs,
+  sourceLanguage,
+  targetLanguage,
+  signal
+}: SystemAudioSessionOptions): Promise<SystemAudioPipelineSession> => {
+  const blocks: ManagedBlock[] = []
+  const itemBindings = new Map<string, ManagedItemBinding>()
+  let nextBlockIndex = 0
+  let totalAudioDurationMs = 0
+  let queue = Promise.resolve()
+  let refinementInFlight = false
+  let finished = false
+
+  const emitBlocks = () => {
+    emitEvent(createBlocksUpdatedEvent(blocks))
+  }
+
+  const findBlockById = (blockId: string): ManagedBlock | undefined =>
+    blocks.find((block) => block.id === blockId)
+
+  const appendNewLiveBlock = () => {
+    const previousBlock = blocks.at(-1)
+    const startMs = previousBlock?.endMs ?? 0
+    const nextBlock = createManagedBlock({
+      index: nextBlockIndex,
+      startMs,
+      endMs: startMs + blockDurationMs
+    })
+    nextBlockIndex += 1
+    blocks.push(nextBlock)
+
+    const liveBlocks = blocks.filter((block) => block.status === 'live')
+    if (liveBlocks.length > 2) {
+      const oldestLive = liveBlocks[0]
+      oldestLive.status = 'pending_refine'
+      oldestLive.updatedAt = Date.now()
+    }
+
+    trimBlocksWindow(blocks, itemBindings)
+    emitBlocks()
+  }
+
+  const ensureWritableLiveBlock = () => {
+    if (blocks.length === 0) {
+      appendNewLiveBlock()
+      return
+    }
+
+    while (true) {
+      const latestBlock = blocks.at(-1)
+
+      if (!latestBlock) {
+        appendNewLiveBlock()
+        return
       }
 
-      await processor.processChunk({ chunk })
-    } finally {
-      await rm(sourcePath, { force: true })
-      await rm(normalizedPath, { force: true })
+      if (totalAudioDurationMs < latestBlock.endMs) {
+        return
+      }
+
+      appendNewLiveBlock()
     }
   }
+
+  const chooseTargetBlockForNewItem = (): ManagedBlock => {
+    const liveBlocks = blocks.filter((block) => block.status === 'live')
+    const emptyLiveBlock = liveBlocks.find(
+      (block) => block.itemOrder.length === 0 && block.liveTranslation.length === 0
+    )
+
+    if (emptyLiveBlock) {
+      return emptyLiveBlock
+    }
+
+    const latestLiveBlock = liveBlocks.at(-1)
+
+    if (!latestLiveBlock) {
+      appendNewLiveBlock()
+      return blocks.at(-1) as ManagedBlock
+    }
+
+    return latestLiveBlock
+  }
+
+  const tryRefinePendingBlocks = async () => {
+    if (refinementInFlight) {
+      return
+    }
+
+    const pendingBlocks = blocks.filter((block) => block.status === 'pending_refine')
+
+    if (pendingBlocks.length < SUBTITLE_BLOCK_PENDING_BATCH_SIZE && !finished) {
+      return
+    }
+
+    const pendingBatch = pendingBlocks.slice(
+      0,
+      finished ? pendingBlocks.length : SUBTITLE_BLOCK_PENDING_BATCH_SIZE
+    )
+
+    if (pendingBatch.length === 0) {
+      return
+    }
+
+    refinementInFlight = true
+
+    try {
+      const firstPendingIndex = blocks.findIndex((block) => block.id === pendingBatch[0]?.id)
+      const refinedContextBlocks = blocks
+        .slice(0, Math.max(firstPendingIndex, 0))
+        .filter((block) => block.status === 'refined')
+        .slice(-SUBTITLE_BLOCK_REFINED_CONTEXT_SIZE)
+        .map(buildRefinementInput)
+
+      const results = await refinementProvider.refineBlocks(
+        {
+          refinedContextBlocks,
+          pendingBlocks: pendingBatch.map(buildRefinementInput)
+        },
+        signal
+      )
+
+      if (applyRefinementResults(blocks, results)) {
+        emitBlocks()
+      }
+    } finally {
+      refinementInFlight = false
+    }
+
+    if (blocks.some((block) => block.status === 'pending_refine')) {
+      await tryRefinePendingBlocks()
+    }
+  }
+
+  const handleLiveTranslateEvent = (event: LiveTranslateStreamEvent) => {
+    let binding = itemBindings.get(event.itemId)
+
+    if (!binding) {
+      const targetBlock = chooseTargetBlockForNewItem()
+      targetBlock.itemOrder.push(event.itemId)
+      targetBlock.itemTextById.set(event.itemId, {
+        sourceTranscript: '',
+        liveTranslation: ''
+      })
+      binding = {
+        blockId: targetBlock.id
+      }
+      itemBindings.set(event.itemId, binding)
+    }
+
+    const block = findBlockById(binding.blockId)
+
+    if (!block) {
+      return
+    }
+
+    const nextItemText = block.itemTextById.get(event.itemId) ?? {
+      sourceTranscript: '',
+      liveTranslation: ''
+    }
+
+    if (event.type === 'source-partial' || event.type === 'source-final') {
+      nextItemText.sourceTranscript = event.fullText
+    } else {
+      nextItemText.liveTranslation = event.fullText
+    }
+
+    block.itemTextById.set(event.itemId, nextItemText)
+    updateBlockText(block)
+    emitBlocks()
+  }
+
+  const liveTranslateSession = await liveTranslateProvider.startSession({
+    targetLanguage,
+    sourceLanguage,
+    signal,
+    onEvent: handleLiveTranslateEvent
+  })
 
   return {
     appendChunk: async (payload) => {
-      queue = queue.then(() => queueChunk(payload))
+      queue = queue.then(async () => {
+        signal?.throwIfAborted?.()
+        ensureWritableLiveBlock()
+        await liveTranslateSession.appendAudioChunk(payload, signal)
+        totalAudioDurationMs += Math.max(1, Math.round(payload.durationMs))
+        await tryRefinePendingBlocks()
+      })
+
       await queue
     },
     complete: async () => {
-      try {
-        await queue
-        processor.complete()
-      } finally {
-        await cleanup()
+      finished = true
+      await queue
+      await liveTranslateSession.finish(signal)
+
+      for (const block of blocks) {
+        if (block.status === 'live') {
+          block.status = 'pending_refine'
+          block.updatedAt = Date.now()
+        }
       }
+
+      emitBlocks()
+      await tryRefinePendingBlocks()
     },
     abort: async () => {
-      try {
-        await queue.catch(() => undefined)
-      } finally {
-        await cleanup()
-      }
+      finished = true
+      await queue.catch(() => undefined)
+      await liveTranslateSession.abort()
     }
   }
 }

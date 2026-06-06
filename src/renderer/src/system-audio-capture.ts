@@ -1,6 +1,7 @@
 import type { SystemAudioChunkPayload } from '../../shared/pipeline'
 
 const TARGET_SAMPLE_RATE = 16_000
+const LIVE_TRANSLATE_PUSH_INTERVAL_MS = 250
 
 export type SystemAudioStopMode = 'complete' | 'pause' | 'reset'
 
@@ -9,7 +10,7 @@ export type SystemAudioCaptureHandle = {
 }
 
 type StartSystemAudioCaptureOptions = {
-  chunkDurationMs: number
+  blockDurationMs: number
   onChunk: (chunk: SystemAudioChunkPayload) => Promise<void> | void
   onStop: (mode: SystemAudioStopMode) => Promise<void> | void
   onError: (error: Error) => Promise<void> | void
@@ -86,55 +87,8 @@ const resampleToTargetRate = (
   return pcm
 }
 
-const encodeMono16BitWav = (pcmSamples: Int16Array, sampleRate: number): Uint8Array => {
-  const bytesPerSample = 2
-  const blockAlign = bytesPerSample
-  const byteRate = sampleRate * blockAlign
-  const dataSize = pcmSamples.length * bytesPerSample
-  const buffer = new ArrayBuffer(44 + dataSize)
-  const view = new DataView(buffer)
-  let offset = 0
-
-  const writeAscii = (value: string) => {
-    for (let index = 0; index < value.length; index += 1) {
-      view.setUint8(offset, value.charCodeAt(index))
-      offset += 1
-    }
-  }
-
-  writeAscii('RIFF')
-  view.setUint32(offset, 36 + dataSize, true)
-  offset += 4
-  writeAscii('WAVE')
-  writeAscii('fmt ')
-  view.setUint32(offset, 16, true)
-  offset += 4
-  view.setUint16(offset, 1, true)
-  offset += 2
-  view.setUint16(offset, 1, true)
-  offset += 2
-  view.setUint32(offset, sampleRate, true)
-  offset += 4
-  view.setUint32(offset, byteRate, true)
-  offset += 4
-  view.setUint16(offset, blockAlign, true)
-  offset += 2
-  view.setUint16(offset, 16, true)
-  offset += 2
-  writeAscii('data')
-  view.setUint32(offset, dataSize, true)
-  offset += 4
-
-  for (let index = 0; index < pcmSamples.length; index += 1) {
-    view.setInt16(offset, pcmSamples[index] ?? 0, true)
-    offset += 2
-  }
-
-  return new Uint8Array(buffer)
-}
-
 export const startSystemAudioCapture = async ({
-  chunkDurationMs,
+  blockDurationMs: _blockDurationMs,
   onChunk,
   onStop,
   onError
@@ -163,7 +117,7 @@ export const startSystemAudioCapture = async ({
 
   const targetChunkSamples = Math.max(
     1,
-    Math.round((TARGET_SAMPLE_RATE * Math.max(500, chunkDurationMs)) / 1000)
+    Math.round((TARGET_SAMPLE_RATE * LIVE_TRANSLATE_PUSH_INTERVAL_MS) / 1000)
   )
 
   let stopMode: SystemAudioStopMode = 'complete'
@@ -178,9 +132,9 @@ export const startSystemAudioCapture = async ({
     }
 
     await onChunk({
-      bytes: encodeMono16BitWav(chunkSamples, TARGET_SAMPLE_RATE),
+      bytes: new Uint8Array(chunkSamples.buffer.slice(0)),
       durationMs: Math.round((chunkSamples.length / TARGET_SAMPLE_RATE) * 1000),
-      mimeType: 'audio/wav'
+      mimeType: 'audio/pcm'
     })
   }
 
