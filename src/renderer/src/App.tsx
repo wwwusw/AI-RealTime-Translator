@@ -29,10 +29,10 @@ export default function App() {
     <main className="app-shell">
       <section className="hero-card">
         <p className="eyebrow">AI RealTime Translator</p>
-        <h1>准备开始本地文件字幕演示页</h1>
+        <h1>准备开始本地文件字幕演示</h1>
         <p>
-          当前时间轴仍是 mock timeline，用来演示 renderer 布局和状态样式；real subtitle event stream
-          还没有接入。
+          选择本地音频或视频文件后，主进程会按 chunk 执行转写、翻译与纠错，renderer
+          会通过真实 subtitle event stream 持续刷新时间轴。
         </p>
       </section>
       <Workspace

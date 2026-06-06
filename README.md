@@ -1,14 +1,14 @@
 # AI RealTime Translator
 
-An Electron MVP for local media translation. The current renderer page includes a mock timeline so we can validate layout, status copy, and subtitle styling before the real subtitle event stream is connected.
+An Electron MVP for local media translation. The app now normalizes local audio/video files, prepares real pipeline chunks, and updates the renderer timeline from live subtitle events emitted by the main process.
 
 ## Current capabilities
 
-- Import a local media file and show the workspace/task controls
+- Import a local audio or video file and run the desktop translation task flow
+- Normalize media to mono 16 kHz WAV, split it into overlapping chunks, and send each chunk through the pipeline
 - Show task status, revision summary, and provider settings
-- Render a mock timeline in the renderer when a file is selected but real subtitle events are still unavailable
-- Show Chinese as the primary subtitle line and English as supporting text
-- Highlight revised draft rows without pretending the renderer is already showing live subtitle events
+- Render Chinese-first subtitles in the renderer from real `subtitle-added` and `subtitle-revised` events
+- Highlight revised rows so users can see when the latest context corrected an earlier subtitle
 
 ## Tech stack
 
@@ -16,13 +16,18 @@ An Electron MVP for local media translation. The current renderer page includes 
 - React
 - TypeScript
 - ffmpeg-static
+- OpenAI-compatible audio transcription provider
 - DeepSeek API for translation and correction via an OpenAI-compatible format
 
 ## Configuration
 
-- `baseUrl`: base URL for the OpenAI-compatible translation endpoint
-- `apiKey`: API key for translation/correction requests
-- `model`: model name for translation/correction requests
+- `translation.baseUrl`: base URL for the OpenAI-compatible translation endpoint
+- `translation.apiKey`: API key for translation/correction requests
+- `translation.model`: model name for translation/correction requests
+- `asr.provider`: current transcription provider selection
+- `asr.baseUrl`: base URL for the OpenAI-compatible ASR endpoint when `openai-audio` is selected
+- `asr.apiKey`: API key for ASR requests
+- `asr.model`: model name for ASR requests
 
 ## Run locally
 
@@ -34,9 +39,9 @@ npm run dev
 ## Known limitations
 
 - Phase 1 supports local file input only
-- The current timeline is still a mock timeline
-- The real subtitle event stream is not wired yet
+- The current UI is still a task workspace, not a floating caption overlay
 - System audio capture will be implemented in a later phase
+- Exporting subtitles is not implemented yet
 
 ## Future notes
 

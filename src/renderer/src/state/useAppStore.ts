@@ -1,7 +1,12 @@
 import { create } from 'zustand'
 import type { AppConfigBridge } from '../../../shared/app-config-bridge'
 import { defaultAppConfig, type AppConfig } from '../../../shared/config'
-import type { PipelineTaskStage, PipelineTaskStatus, PipelineTasksBridge } from '../../../shared/pipeline'
+import type {
+  PipelineEvent,
+  PipelineTaskStage,
+  PipelineTaskStatus,
+  PipelineTasksBridge
+} from '../../../shared/pipeline'
 import type { SubtitleStatus } from '../../../shared/subtitles'
 
 export type TimelineSubtitle = {
@@ -14,7 +19,7 @@ export type TimelineSubtitle = {
   revisionCount: number
 }
 
-export type TimelineMode = 'empty' | 'mock'
+export type TimelineMode = 'empty' | 'live'
 
 type AppStoreTaskState = {
   filePath: string | null
@@ -23,7 +28,6 @@ type AppStoreTaskState = {
   isRunning: boolean
   canStart: boolean
   lastRevisionSummary: string
-  subtitles: TimelineSubtitle[]
   timelineMode: TimelineMode
 }
 
@@ -44,6 +48,8 @@ type AppStore = {
   pause: () => Promise<void>
   reset: () => Promise<void>
 }
+
+let unsubscribeFromPipelineEvents: (() => void) | null = null
 
 const getAppConfigBridge = (): AppConfigBridge | undefined => {
   if (typeof window === 'undefined') {
@@ -77,55 +83,67 @@ const getStageLabel = (stage: PipelineTaskStage): string => {
   }
 }
 
-const createMockSubtitles = (): TimelineSubtitle[] => [
-  {
-    id: 'timeline-1',
-    startMs: 0,
-    endMs: 2800,
-    english: 'Mock line: the local file is ready for timeline preview.',
-    chinese: '演示字幕：本地文件已准备好预览时间轴。',
-    status: 'draft',
-    revisionCount: 0
-  },
-  {
-    id: 'timeline-2',
-    startMs: 2800,
-    endMs: 6100,
-    english: 'Mock line: this row shows how a revised draft would look.',
-    chinese: '演示字幕：这一行用于展示修订中的草稿样式。',
-    status: 'draft',
-    revisionCount: 1
-  },
-  {
-    id: 'timeline-3',
-    startMs: 6100,
-    endMs: 8800,
-    english: 'Mock line: this row stays stable to preview the final subtitle state.',
-    chinese: '演示字幕：这一行保持稳定，用于展示最终字幕状态。',
-    status: 'final',
-    revisionCount: 0
-  }
-]
+const createTaskState = (status?: PipelineTaskStatus): AppStoreTaskState => ({
+  filePath: status?.filePath ?? null,
+  stage: status?.stage ?? 'idle',
+  stageLabel: getStageLabel(status?.stage ?? 'idle'),
+  isRunning: status?.isRunning ?? false,
+  canStart: status?.canStart ?? false,
+  lastRevisionSummary: status?.lastRevisionSummary ?? 'No task has run yet.',
+  timelineMode: status?.filePath ? 'live' : 'empty'
+})
 
-const createTaskState = (status?: PipelineTaskStatus): AppStoreTaskState => {
-  const hasFile = Boolean(status?.filePath)
-  const subtitles = hasFile ? createMockSubtitles() : []
-
-  return {
-    filePath: status?.filePath ?? null,
-    stage: status?.stage ?? 'idle',
-    stageLabel: getStageLabel(status?.stage ?? 'idle'),
-    isRunning: status?.isRunning ?? false,
-    canStart: status?.canStart ?? false,
-    lastRevisionSummary: status?.lastRevisionSummary ?? 'No task has run yet.',
-    subtitles,
-    timelineMode: hasFile ? 'mock' : 'empty'
+const applyPipelineEventToSubtitles = (
+  subtitles: TimelineSubtitle[],
+  event: PipelineEvent
+): TimelineSubtitle[] => {
+  switch (event.type) {
+    case 'subtitle-added':
+      return [
+        ...subtitles,
+        {
+          id: event.subtitle.id,
+          startMs: event.chunk.startMs,
+          endMs: event.chunk.endMs,
+          english: event.subtitle.english,
+          chinese: event.subtitle.chinese,
+          status: event.subtitle.status,
+          revisionCount: event.subtitle.revisionCount
+        }
+      ]
+    case 'subtitle-revised':
+      return subtitles.map((subtitle) =>
+        subtitle.id === event.subtitle.id
+          ? {
+              ...subtitle,
+              english: event.subtitle.english,
+              chinese: event.subtitle.chinese,
+              status: event.subtitle.status,
+              revisionCount: event.subtitle.revisionCount
+            }
+          : subtitle
+      )
+    case 'pipeline-completed':
+    default:
+      return subtitles
   }
+}
+
+const ensurePipelineSubscription = (
+  bridge: PipelineTasksBridge | undefined,
+  onEvent: (event: PipelineEvent) => void
+) => {
+  if (!bridge?.onPipelineEvent || unsubscribeFromPipelineEvents) {
+    return
+  }
+
+  unsubscribeFromPipelineEvents = bridge.onPipelineEvent(onEvent)
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
   config: defaultAppConfig,
   ...createTaskState(),
+  subtitles: [],
   hydrateConfig: async () => {
     const appConfigBridge = getAppConfigBridge()
     const pipelineTasksBridge = getPipelineTasksBridge()
@@ -134,13 +152,21 @@ export const useAppStore = create<AppStore>((set, get) => ({
       return
     }
 
+    ensurePipelineSubscription(pipelineTasksBridge, (event) => {
+      set((state) => ({
+        subtitles: applyPipelineEventToSubtitles(state.subtitles, event)
+      }))
+    })
+
     const config = await appConfigBridge.load()
     const taskStatus = pipelineTasksBridge
       ? await pipelineTasksBridge.getTaskStatus()
       : undefined
+
     set({
       config,
-      ...createTaskState(taskStatus)
+      ...createTaskState(taskStatus),
+      subtitles: taskStatus?.filePath ? [] : get().subtitles
     })
   },
   saveConfig: async (config) => {
@@ -167,7 +193,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     const status = await bridge.getTaskStatus()
     set({
-      ...createTaskState(status)
+      ...createTaskState(status),
+      subtitles: []
     })
   },
   start: async () => {
@@ -178,7 +205,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     const status = await bridge.startTask(get().filePath)
     set({
-      ...createTaskState(status)
+      ...createTaskState(status),
+      subtitles: []
     })
   },
   pause: async () => {
@@ -188,22 +216,25 @@ export const useAppStore = create<AppStore>((set, get) => ({
     }
 
     const status = await bridge.pauseTask()
-    set({
-      ...createTaskState(status)
-    })
+    set((state) => ({
+      ...createTaskState(status),
+      subtitles: state.subtitles
+    }))
   },
   reset: async () => {
     const bridge = getPipelineTasksBridge()
     if (!bridge) {
       set({
-        ...createTaskState()
+        ...createTaskState(),
+        subtitles: []
       })
       return
     }
 
     const status = await bridge.resetTask()
     set({
-      ...createTaskState(status)
+      ...createTaskState(status),
+      subtitles: []
     })
   }
 }))

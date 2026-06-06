@@ -19,7 +19,7 @@ const demoSubtitles: TimelineSubtitle[] = [
     startMs: 2800,
     endMs: 5600,
     english: 'The model revised the phrasing for clarity.',
-    chinese: '模型已经把这句修订得更清楚。',
+    chinese: '模型已经把这句话修订得更清楚。',
     status: 'draft',
     revisionCount: 2
   },
@@ -27,8 +27,8 @@ const demoSubtitles: TimelineSubtitle[] = [
     id: 'line-3',
     startMs: 5600,
     endMs: 8600,
-    english: 'This sentence is already stable in the mock timeline.',
-    chinese: '这句字幕在演示时间轴中已经稳定。',
+    english: 'This sentence is already stable in the live timeline.',
+    chinese: '这句字幕在实时时间轴中已经稳定。',
     status: 'final',
     revisionCount: 0
   }
@@ -39,11 +39,11 @@ describe('SubtitleTimeline', () => {
     const html = renderToStaticMarkup(
       createElement(SubtitleTimeline, {
         subtitles: demoSubtitles,
-        timelineMode: 'mock'
+        timelineMode: 'live'
       })
     )
 
-    expect(html).toContain('mock timeline')
+    expect(html).toContain('Timeline updates from real pipeline events.')
     expect(html).toContain('欢迎回到实时工作台。')
     expect(html).toContain('Welcome back to the live workspace.')
     expect(html).toContain('处理中')

@@ -14,8 +14,6 @@ const formatTimestamp = (timeMs: number): string => {
 }
 
 export function SubtitleTimeline({ subtitles, timelineMode }: SubtitleTimelineProps) {
-  const isMock = timelineMode === 'mock'
-
   return (
     <section className="timeline-card" aria-label="Subtitle timeline">
       <div className="timeline-header">
@@ -24,8 +22,7 @@ export function SubtitleTimeline({ subtitles, timelineMode }: SubtitleTimelinePr
           <h2>字幕时间轴</h2>
         </div>
         <p className="timeline-caption">
-          中文主显示，英文保留为辅助参考。
-          {isMock ? ' Current view is a mock timeline until the real subtitle event stream is wired.' : ''}
+          中文优先显示，英文保留为辅助参考。{timelineMode === 'live' ? ' Timeline updates from real pipeline events.' : ''}
         </p>
       </div>
       {subtitles.length === 0 ? (
@@ -49,7 +46,6 @@ export function SubtitleTimeline({ subtitles, timelineMode }: SubtitleTimelinePr
                 </div>
                 <p className="timeline-chinese">{line.chinese}</p>
                 <p className="timeline-english">{line.english}</p>
-                {isMock ? <p className="timeline-revision">mock timeline</p> : null}
                 {isRevised ? <p className="timeline-revision">Revision count: {line.revisionCount}</p> : null}
               </li>
             )

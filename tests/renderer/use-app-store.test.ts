@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultAppConfig } from '../../src/shared/config'
-import type { PipelineTaskStatus } from '../../src/shared/pipeline'
+import type { PipelineEvent, PipelineTaskStatus } from '../../src/shared/pipeline'
 
 const createStatus = (overrides: Partial<PipelineTaskStatus> = {}): PipelineTaskStatus => ({
   filePath: null,
@@ -14,6 +14,104 @@ const createStatus = (overrides: Partial<PipelineTaskStatus> = {}): PipelineTask
 describe('useAppStore task controls', () => {
   beforeEach(() => {
     vi.resetModules()
+  })
+
+  it('hydrates an empty real timeline and applies subtitle events from the bridge', async () => {
+    const eventListeners: Array<(event: PipelineEvent) => void> = []
+
+    window.appConfig = {
+      load: vi.fn().mockResolvedValue(defaultAppConfig),
+      save: vi.fn().mockResolvedValue(defaultAppConfig)
+    }
+    window.pipelineTasks = {
+      pickMediaFile: vi.fn().mockResolvedValue(null),
+      getTaskStatus: vi.fn().mockResolvedValue(
+        createStatus({
+          filePath: 'fixtures/demo.wav',
+          stage: 'ready',
+          isRunning: false,
+          canStart: true,
+          lastRevisionSummary: 'File selected. Waiting for the real pipeline to start.'
+        })
+      ),
+      startTask: vi.fn().mockResolvedValue(
+        createStatus({
+          filePath: 'fixtures/demo.wav',
+          stage: 'running',
+          isRunning: true,
+          canStart: false,
+          lastRevisionSummary: 'Task started. Waiting for pipeline events.'
+        })
+      ),
+      pauseTask: vi.fn().mockResolvedValue(createStatus()),
+      resetTask: vi.fn().mockResolvedValue(createStatus()),
+      onPipelineEvent: vi.fn((listener: (event: PipelineEvent) => void) => {
+        eventListeners.push(listener)
+        return () => {}
+      })
+    }
+
+    const { useAppStore } = await import('../../src/renderer/src/state/useAppStore')
+
+    await useAppStore.getState().hydrateConfig()
+    expect(useAppStore.getState().timelineMode).toBe('live')
+    expect(useAppStore.getState().subtitles).toEqual([])
+
+    await useAppStore.getState().start()
+
+    eventListeners[0]?.({
+      type: 'subtitle-added',
+      chunk: {
+        index: 0,
+        startMs: 0,
+        endMs: 5_000,
+        filePath: 'fixtures/chunk-0.wav'
+      },
+      subtitle: {
+        id: 'chunk-0',
+        english: 'hello conference',
+        chinese: 'draft translation',
+        status: 'draft',
+        revisionCount: 0,
+        updatedAt: 1
+      }
+    })
+
+    expect(useAppStore.getState().subtitles).toEqual([
+      {
+        id: 'chunk-0',
+        startMs: 0,
+        endMs: 5_000,
+        english: 'hello conference',
+        chinese: 'draft translation',
+        status: 'draft',
+        revisionCount: 0
+      }
+    ])
+
+    eventListeners[0]?.({
+      type: 'subtitle-revised',
+      subtitle: {
+        id: 'chunk-0',
+        english: 'hello conference',
+        chinese: 'revised translation',
+        status: 'final',
+        revisionCount: 1,
+        updatedAt: 2
+      }
+    })
+
+    expect(useAppStore.getState().subtitles).toEqual([
+      {
+        id: 'chunk-0',
+        startMs: 0,
+        endMs: 5_000,
+        english: 'hello conference',
+        chinese: 'revised translation',
+        status: 'final',
+        revisionCount: 1
+      }
+    ])
   })
 
   it('tracks pick, start, pause, and reset through the task bridge', async () => {
@@ -30,28 +128,24 @@ describe('useAppStore task controls', () => {
         })
       )
       .mockResolvedValue(createStatus())
-    const startTask = vi
-      .fn()
-      .mockResolvedValue(
-        createStatus({
-          filePath: 'fixtures/chunk-0.wav',
-          stage: 'running',
-          isRunning: true,
-          canStart: false,
-          lastRevisionSummary: 'Task controls wired. Pipeline execution is still minimal.'
-        })
-      )
-    const pauseTask = vi
-      .fn()
-      .mockResolvedValue(
-        createStatus({
-          filePath: 'fixtures/chunk-0.wav',
-          stage: 'paused',
-          isRunning: false,
-          canStart: true,
-          lastRevisionSummary: 'Task paused before end-to-end execution completed.'
-        })
-      )
+    const startTask = vi.fn().mockResolvedValue(
+      createStatus({
+        filePath: 'fixtures/chunk-0.wav',
+        stage: 'running',
+        isRunning: true,
+        canStart: false,
+        lastRevisionSummary: 'Task controls wired. Pipeline execution is still minimal.'
+      })
+    )
+    const pauseTask = vi.fn().mockResolvedValue(
+      createStatus({
+        filePath: 'fixtures/chunk-0.wav',
+        stage: 'paused',
+        isRunning: false,
+        canStart: true,
+        lastRevisionSummary: 'Task paused before end-to-end execution completed.'
+      })
+    )
     const resetTask = vi.fn().mockResolvedValue(createStatus())
 
     window.appConfig = {
@@ -112,7 +206,7 @@ describe('useAppStore task controls', () => {
     expect(useAppStore.getState().subtitles).toEqual([])
   })
 
-  it('provides clearly marked mock subtitles with visible draft and final states when a file is present', async () => {
+  it('keeps the real timeline empty before subtitle events arrive even when a file is present', async () => {
     window.appConfig = {
       load: vi.fn().mockResolvedValue(defaultAppConfig),
       save: vi.fn().mockResolvedValue(defaultAppConfig)
@@ -125,7 +219,7 @@ describe('useAppStore task controls', () => {
           stage: 'ready',
           isRunning: false,
           canStart: true,
-          lastRevisionSummary: 'Mock timeline only. Real subtitle events are not wired yet.'
+          lastRevisionSummary: 'Real subtitle events have not arrived yet.'
         })
       ),
       startTask: vi.fn().mockResolvedValue(createStatus()),
@@ -136,11 +230,7 @@ describe('useAppStore task controls', () => {
     const { useAppStore } = await import('../../src/renderer/src/state/useAppStore')
 
     await useAppStore.getState().hydrateConfig()
-    const subtitles = useAppStore.getState().subtitles
-
-    expect(subtitles.length).toBeGreaterThan(0)
-    expect(subtitles.some((line) => line.status === 'draft')).toBe(true)
-    expect(subtitles.some((line) => line.status === 'final')).toBe(true)
-    expect(subtitles.some((line) => line.revisionCount > 0)).toBe(true)
+    expect(useAppStore.getState().timelineMode).toBe('live')
+    expect(useAppStore.getState().subtitles).toEqual([])
   })
 })

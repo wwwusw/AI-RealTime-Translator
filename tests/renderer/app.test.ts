@@ -8,7 +8,7 @@ describe('App', () => {
     const html = renderToStaticMarkup(createElement(App))
 
     expect(html).toContain('AI RealTime Translator')
-    expect(html).toContain('mock timeline')
+    expect(html).toContain('subtitle event stream')
     expect(html).toContain('No media file selected yet.')
     expect(html).toContain('empty state')
     expect(html).not.toContain('Revision count:')
