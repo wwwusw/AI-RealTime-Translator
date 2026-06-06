@@ -2,15 +2,26 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { pipelineTaskChannels } from '../../src/shared/pipeline'
 
 const handlers = new Map<string, (...args: unknown[]) => unknown>()
+const browserWindowSendMock = vi.fn()
 
 const loadConfigMock = vi.fn()
 const pickMediaFileMock = vi.fn()
 const runPipelineMock = vi.fn()
+const preparePipelineChunksMock = vi.fn()
 const createScriptedAsrProviderMock = vi.fn()
 const createOpenAiAudioAsrProviderMock = vi.fn()
 const createOpenAiChatTranslationProviderMock = vi.fn()
 
 vi.mock('electron', () => ({
+  BrowserWindow: {
+    getAllWindows: vi.fn(() => [
+      {
+        webContents: {
+          send: browserWindowSendMock
+        }
+      }
+    ])
+  },
   ipcMain: {
     handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
       handlers.set(channel, handler)
@@ -28,6 +39,10 @@ vi.mock('../../src/main/services/file-picker', () => ({
 
 vi.mock('../../src/main/services/pipeline-runner', () => ({
   runPipeline: runPipelineMock
+}))
+
+vi.mock('../../src/main/services/pipeline-media-prep', () => ({
+  preparePipelineChunks: preparePipelineChunksMock
 }))
 
 vi.mock('../../src/main/services/providers/scripted-asr-provider', () => ({
@@ -70,30 +85,65 @@ describe('registerTaskHandlers', () => {
       chunkDurationMs: 5000,
       chunkOverlapMs: 1000
     })
-    pickMediaFileMock.mockResolvedValue({ filePath: 'fixtures/chunk-0.wav' })
+    pickMediaFileMock.mockResolvedValue({ filePath: 'fixtures/input.wav' })
+    preparePipelineChunksMock.mockResolvedValue({
+      normalizedFilePath: 'fixtures/normalized.wav',
+      chunks: [
+        {
+          index: 0,
+          startMs: 0,
+          endMs: 5_000,
+          filePath: 'fixtures/chunk-0.wav'
+        },
+        {
+          index: 1,
+          startMs: 4_000,
+          endMs: 9_000,
+          filePath: 'fixtures/chunk-1.wav'
+        }
+      ],
+      cleanup: vi.fn().mockResolvedValue(undefined)
+    })
     createScriptedAsrProviderMock.mockReturnValue({
-      transcribeChunk: vi.fn().mockResolvedValue('scripted')
+      transcribeChunk: vi.fn().mockResolvedValue('scripted transcript')
     })
     createOpenAiAudioAsrProviderMock.mockReturnValue({
       transcribeChunk: vi.fn().mockResolvedValue('hello conference')
     })
     createOpenAiChatTranslationProviderMock.mockReturnValue({
-      translateBatch: vi.fn().mockResolvedValue([{ id: 'chunk-0', chinese: '你好，会议' }]),
-      reviseBatch: vi.fn().mockResolvedValue([{ id: 'chunk-0', chinese: '你好，会议' }])
+      translateBatch: vi.fn().mockResolvedValue([{ id: 'chunk-0', chinese: 'draft translation' }]),
+      reviseBatch: vi.fn().mockResolvedValue([{ id: 'chunk-0', chinese: 'revised translation' }])
     })
   })
 
-  it('starts the pipeline with config-selected providers and records the latest revision summary', async () => {
+  it('starts the pipeline with prepared chunks, forwards pipeline events to the window, and records the latest revision summary', async () => {
     runPipelineMock.mockImplementation(async ({ emitEvent }) => {
+      emitEvent({
+        type: 'subtitle-added',
+        chunk: {
+          index: 0,
+          startMs: 0,
+          endMs: 5_000,
+          filePath: 'fixtures/chunk-0.wav'
+        },
+        subtitle: {
+          id: 'chunk-0',
+          english: 'hello conference',
+          chinese: 'draft translation',
+          status: 'draft',
+          revisionCount: 0,
+          updatedAt: 1
+        }
+      })
       emitEvent({
         type: 'subtitle-revised',
         subtitle: {
           id: 'chunk-0',
           english: 'hello conference',
-          chinese: '你好，会议',
-          status: 'draft',
+          chinese: 'revised translation',
+          status: 'final',
           revisionCount: 1,
-          updatedAt: 1
+          updatedAt: 2
         }
       })
       emitEvent({
@@ -102,10 +152,10 @@ describe('registerTaskHandlers', () => {
           {
             id: 'chunk-0',
             english: 'hello conference',
-            chinese: '你好，会议',
-            status: 'draft',
+            chinese: 'revised translation',
+            status: 'final',
             revisionCount: 1,
-            updatedAt: 1
+            updatedAt: 2
           }
         ]
       })
@@ -121,14 +171,21 @@ describe('registerTaskHandlers', () => {
     expect(startTask).toBeDefined()
     expect(getTaskStatus).toBeDefined()
 
-    const startStatus = await startTask?.({}, 'fixtures/chunk-0.wav')
+    const startStatus = await startTask?.({}, 'fixtures/input.wav')
     expect(startStatus).toMatchObject({
-      filePath: 'fixtures/chunk-0.wav',
+      filePath: 'fixtures/input.wav',
       stage: 'running',
       isRunning: true
     })
 
-    await Promise.resolve()
+    await vi.waitFor(async () => {
+      await expect(getTaskStatus?.()).resolves.toMatchObject({
+        stage: 'completed',
+        isRunning: false,
+        canStart: true,
+        lastRevisionSummary: 'Latest revision: revised translation'
+      })
+    })
 
     expect(createOpenAiAudioAsrProviderMock).toHaveBeenCalledWith({
       baseUrl: 'https://api.openai.com/v1',
@@ -140,26 +197,38 @@ describe('registerTaskHandlers', () => {
       apiKey: 'translation-key',
       model: 'deepseek-v4-flash'
     })
+    expect(preparePipelineChunksMock).toHaveBeenCalledWith('fixtures/input.wav', {
+      chunkDurationMs: 5000,
+      chunkOverlapMs: 1000
+    })
     expect(runPipelineMock).toHaveBeenCalledWith(
       expect.objectContaining({
         chunks: [
           {
             index: 0,
             startMs: 0,
-            endMs: 0,
+            endMs: 5_000,
             filePath: 'fixtures/chunk-0.wav'
+          },
+          {
+            index: 1,
+            startMs: 4_000,
+            endMs: 9_000,
+            filePath: 'fixtures/chunk-1.wav'
           }
         ],
         revisionWindowSize: 4,
         signal: expect.any(AbortSignal)
       })
     )
-    await expect(getTaskStatus?.()).resolves.toMatchObject({
-      stage: 'completed',
-      isRunning: false,
-      canStart: true,
-      lastRevisionSummary: 'Latest revision: 你好，会议'
-    })
+    expect(browserWindowSendMock).toHaveBeenCalledWith(
+      pipelineTaskChannels.pipelineEvent,
+      expect.objectContaining({ type: 'subtitle-added' })
+    )
+    expect(browserWindowSendMock).toHaveBeenCalledWith(
+      pipelineTaskChannels.pipelineEvent,
+      expect.objectContaining({ type: 'subtitle-revised' })
+    )
   })
 
   it('aborts the in-flight pipeline on pause and reset, and does not start twice', async () => {
@@ -183,8 +252,8 @@ describe('registerTaskHandlers', () => {
     const resetTask = handlers.get(pipelineTaskChannels.resetTask)
     const getTaskStatus = handlers.get(pipelineTaskChannels.getTaskStatus)
 
-    await startTask?.({}, 'fixtures/chunk-0.wav')
-    const secondStartStatus = await startTask?.({}, 'fixtures/chunk-0.wav')
+    await startTask?.({}, 'fixtures/input.wav')
+    const secondStartStatus = await startTask?.({}, 'fixtures/input.wav')
 
     expect(runPipelineMock).toHaveBeenCalledTimes(1)
     expect(secondStartStatus).toMatchObject({
@@ -209,7 +278,7 @@ describe('registerTaskHandlers', () => {
       stage: 'paused'
     })
 
-    await startTask?.({}, 'fixtures/chunk-0.wav')
+    await startTask?.({}, 'fixtures/input.wav')
     const resetStatus = await resetTask?.()
     expect(resetStatus).toMatchObject({
       stage: 'idle',

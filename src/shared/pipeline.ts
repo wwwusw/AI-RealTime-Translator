@@ -5,7 +5,8 @@ export const pipelineTaskChannels = {
   getTaskStatus: 'pipeline:get-task-status',
   startTask: 'pipeline:start-task',
   pauseTask: 'pipeline:pause-task',
-  resetTask: 'pipeline:reset-task'
+  resetTask: 'pipeline:reset-task',
+  pipelineEvent: 'pipeline:event'
 } as const
 
 export type ImportedMediaFile = {
@@ -28,6 +29,7 @@ export type PipelineTasksBridge = {
   startTask: (filePath: string | null) => Promise<PipelineTaskStatus>
   pauseTask: () => Promise<PipelineTaskStatus>
   resetTask: () => Promise<PipelineTaskStatus>
+  onPipelineEvent?: (listener: (event: PipelineEvent) => void) => () => void
 }
 
 export type PlannedChunk = {

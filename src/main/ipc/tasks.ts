@@ -1,5 +1,5 @@
 import { basename } from 'node:path'
-import { ipcMain } from 'electron'
+import { BrowserWindow, ipcMain } from 'electron'
 import type { AppConfig } from '../../shared/config'
 import {
   pipelineTaskChannels,
@@ -9,6 +9,7 @@ import {
 } from '../../shared/pipeline'
 import { loadConfig } from '../services/config-store'
 import { pickMediaFile } from '../services/file-picker'
+import { preparePipelineChunks } from '../services/pipeline-media-prep'
 import { runPipeline } from '../services/pipeline-runner'
 import { createOpenAiAudioAsrProvider } from '../services/providers/openai-audio-asr-provider'
 import { createOpenAiChatTranslationProvider } from '../services/providers/openai-chat-translation-provider'
@@ -80,6 +81,12 @@ const setTaskStatus = (status: PipelineTaskStatus) => {
 const isAbortError = (error: unknown): boolean =>
   error instanceof Error && error.name === 'AbortError'
 
+const broadcastPipelineEvent = (event: PipelineEvent) => {
+  for (const window of BrowserWindow.getAllWindows()) {
+    window.webContents.send(pipelineTaskChannels.pipelineEvent, event)
+  }
+}
+
 const startPipelineRun = (filePath: string, config: AppConfig): PipelineTaskStatus => {
   const controller = new AbortController()
   const translationProvider = createOpenAiChatTranslationProvider(config.translation)
@@ -93,34 +100,43 @@ const startPipelineRun = (filePath: string, config: AppConfig): PipelineTaskStat
     })
   )
 
-  const promise = runPipeline({
-    chunks: [
-      {
-        index: 0,
-        startMs: 0,
-        endMs: 0,
-        filePath
-      }
-    ],
-    asrProvider,
-    translationProvider,
-    revisionWindowSize: config.revisionWindowSize,
-    signal: controller.signal,
-    emitEvent: (event) => {
-      const nextSummary = createRevisionSummary(event)
-      if (!nextSummary) {
-        return
-      }
+  let cleanupPreparedMedia: (() => Promise<void>) | null = null
 
-      setTaskStatus(
-        buildTaskStatus({
-          filePath: currentTaskStatus.filePath,
-          stage: currentTaskStatus.stage,
-          lastRevisionSummary: nextSummary
-        })
-      )
+  const promise = (async () => {
+    const preparedPipeline = await preparePipelineChunks(filePath, {
+      chunkDurationMs: config.chunkDurationMs,
+      chunkOverlapMs: config.chunkOverlapMs
+    })
+    cleanupPreparedMedia = preparedPipeline.cleanup
+
+    if (controller.signal.aborted) {
+      return
     }
-  })
+
+    await runPipeline({
+      chunks: preparedPipeline.chunks,
+      asrProvider,
+      translationProvider,
+      revisionWindowSize: config.revisionWindowSize,
+      signal: controller.signal,
+      emitEvent: (event) => {
+        broadcastPipelineEvent(event)
+
+        const nextSummary = createRevisionSummary(event)
+        if (!nextSummary) {
+          return
+        }
+
+        setTaskStatus(
+          buildTaskStatus({
+            filePath: currentTaskStatus.filePath,
+            stage: currentTaskStatus.stage,
+            lastRevisionSummary: nextSummary
+          })
+        )
+      }
+    })
+  })()
     .then(() => {
       if (runningTask?.controller !== controller || controller.signal.aborted) {
         return
@@ -153,6 +169,7 @@ const startPipelineRun = (filePath: string, config: AppConfig): PipelineTaskStat
       )
     })
     .finally(() => {
+      void cleanupPreparedMedia?.()
       if (runningTask?.controller === controller) {
         runningTask = null
       }
