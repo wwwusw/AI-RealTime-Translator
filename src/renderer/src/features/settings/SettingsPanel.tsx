@@ -43,6 +43,25 @@ export function SettingsPanel({ config, onSave }: SettingsPanelProps) {
         </label>
 
         <label className="settings-field">
+          <span>Subtitle Block Duration</span>
+          <select
+            name="block-duration-ms"
+            value={String(draftConfig.blockDurationMs)}
+            onChange={(event) => {
+              const blockDurationMs = Number(event.target.value)
+              setDraftConfig((currentConfig) => ({
+                ...currentConfig,
+                blockDurationMs
+              }))
+            }}
+          >
+            <option value="2000">2 seconds</option>
+            <option value="3000">3 seconds</option>
+            <option value="4000">4 seconds</option>
+          </select>
+        </label>
+
+        <label className="settings-field">
           <span>ASR Provider</span>
           <select
             name="asr-provider"
@@ -122,17 +141,17 @@ export function SettingsPanel({ config, onSave }: SettingsPanelProps) {
         </label>
 
         <label className="settings-field">
-          <span>Translation Base URL</span>
+          <span>Live Translate Base URL</span>
           <input
-            name="translation-base-url"
+            name="live-translate-base-url"
             type="url"
-            value={draftConfig.translation.baseUrl}
+            value={draftConfig.liveTranslate.baseUrl}
             onChange={(event) => {
               const baseUrl = event.target.value
               setDraftConfig((currentConfig) => ({
                 ...currentConfig,
-                translation: {
-                  ...currentConfig.translation,
+                liveTranslate: {
+                  ...currentConfig.liveTranslate,
                   baseUrl
                 }
               }))
@@ -141,17 +160,17 @@ export function SettingsPanel({ config, onSave }: SettingsPanelProps) {
         </label>
 
         <label className="settings-field">
-          <span>Translation API Key</span>
+          <span>Live Translate API Key</span>
           <input
-            name="translation-api-key"
+            name="live-translate-api-key"
             type="password"
-            value={draftConfig.translation.apiKey}
+            value={draftConfig.liveTranslate.apiKey}
             onChange={(event) => {
               const apiKey = event.target.value
               setDraftConfig((currentConfig) => ({
                 ...currentConfig,
-                translation: {
-                  ...currentConfig.translation,
+                liveTranslate: {
+                  ...currentConfig.liveTranslate,
                   apiKey
                 }
               }))
@@ -160,17 +179,112 @@ export function SettingsPanel({ config, onSave }: SettingsPanelProps) {
         </label>
 
         <label className="settings-field">
-          <span>Translation Model</span>
+          <span>Live Translate Model</span>
           <input
-            name="translation-model"
+            name="live-translate-model"
             type="text"
-            value={draftConfig.translation.model}
+            value={draftConfig.liveTranslate.model}
             onChange={(event) => {
               const model = event.target.value
               setDraftConfig((currentConfig) => ({
                 ...currentConfig,
-                translation: {
-                  ...currentConfig.translation,
+                liveTranslate: {
+                  ...currentConfig.liveTranslate,
+                  model
+                }
+              }))
+            }}
+          />
+        </label>
+
+        <label className="settings-field">
+          <span>Source Language</span>
+          <input
+            name="source-language"
+            type="text"
+            value={draftConfig.liveTranslate.sourceLanguage}
+            onChange={(event) => {
+              const sourceLanguage = event.target.value
+              setDraftConfig((currentConfig) => ({
+                ...currentConfig,
+                liveTranslate: {
+                  ...currentConfig.liveTranslate,
+                  sourceLanguage
+                }
+              }))
+            }}
+          />
+        </label>
+
+        <label className="settings-field">
+          <span>Target Language</span>
+          <input
+            name="target-language"
+            type="text"
+            value={draftConfig.liveTranslate.targetLanguage}
+            onChange={(event) => {
+              const targetLanguage = event.target.value
+              setDraftConfig((currentConfig) => ({
+                ...currentConfig,
+                liveTranslate: {
+                  ...currentConfig.liveTranslate,
+                  targetLanguage
+                }
+              }))
+            }}
+          />
+        </label>
+
+        <label className="settings-field">
+          <span>Refiner Base URL</span>
+          <input
+            name="refiner-base-url"
+            type="url"
+            value={draftConfig.refiner.baseUrl}
+            onChange={(event) => {
+              const baseUrl = event.target.value
+              setDraftConfig((currentConfig) => ({
+                ...currentConfig,
+                refiner: {
+                  ...currentConfig.refiner,
+                  baseUrl
+                }
+              }))
+            }}
+          />
+        </label>
+
+        <label className="settings-field">
+          <span>Refiner API Key</span>
+          <input
+            name="refiner-api-key"
+            type="password"
+            value={draftConfig.refiner.apiKey}
+            onChange={(event) => {
+              const apiKey = event.target.value
+              setDraftConfig((currentConfig) => ({
+                ...currentConfig,
+                refiner: {
+                  ...currentConfig.refiner,
+                  apiKey
+                }
+              }))
+            }}
+          />
+        </label>
+
+        <label className="settings-field">
+          <span>Refiner Model</span>
+          <input
+            name="refiner-model"
+            type="text"
+            value={draftConfig.refiner.model}
+            onChange={(event) => {
+              const model = event.target.value
+              setDraftConfig((currentConfig) => ({
+                ...currentConfig,
+                refiner: {
+                  ...currentConfig.refiner,
                   model
                 }
               }))

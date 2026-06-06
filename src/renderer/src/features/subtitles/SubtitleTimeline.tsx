@@ -1,7 +1,8 @@
-import type { TimelineMode, TimelineSubtitle } from '../../state/useAppStore'
+import { useEffect, useRef } from 'react'
+import type { TimelineMode, TimelineSubtitleBlock } from '../../state/useAppStore'
 
 type SubtitleTimelineProps = {
-  subtitles: TimelineSubtitle[]
+  subtitleBlocks: TimelineSubtitleBlock[]
   timelineMode: TimelineMode
 }
 
@@ -13,47 +14,72 @@ const formatTimestamp = (timeMs: number): string => {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
-export function SubtitleTimeline({ subtitles, timelineMode }: SubtitleTimelineProps) {
+const getDisplayTranslation = (block: TimelineSubtitleBlock): string =>
+  block.refinedTranslation || block.liveTranslation || 'Waiting for live translation...'
+
+const getDisplayTranscript = (block: TimelineSubtitleBlock): string =>
+  block.sourceTranscript || 'Listening for the next transcript segment...'
+
+const getStateLabel = (status: TimelineSubtitleBlock['status']): string => {
+  switch (status) {
+    case 'refined':
+      return 'Refined'
+    case 'pending_refine':
+      return 'Pending'
+    case 'live':
+    default:
+      return 'Live'
+  }
+}
+
+export function SubtitleTimeline({ subtitleBlocks, timelineMode }: SubtitleTimelineProps) {
+  const scrollerRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const scroller = scrollerRef.current
+
+    if (!scroller) {
+      return
+    }
+
+    scroller.scrollTop = scroller.scrollHeight
+  }, [subtitleBlocks])
+
   return (
-    <section className="timeline-card" aria-label="Subtitle timeline">
+    <section className="timeline-card subtitle-window-card" aria-label="Subtitle timeline">
       <div className="timeline-header">
         <div>
-          <p className="eyebrow">Subtitle Timeline</p>
-          <h2>Live revision window</h2>
+          <p className="eyebrow">Realtime Subtitle Window</p>
+          <h2>Single-box rolling captions</h2>
         </div>
         <p className="timeline-caption">
-          Chinese stays first, English remains visible for verification.
-          {timelineMode === 'live' ? ' Timeline updates from real pipeline events.' : ''}
+          Recent translation blocks stay in one scrolling subtitle surface.
+          {timelineMode === 'live' ? ' The newest block keeps growing in place.' : ''}
         </p>
       </div>
-      {subtitles.length === 0 ? (
-        <p className="timeline-empty">Timeline empty state. No subtitle events have arrived yet.</p>
+      {subtitleBlocks.length === 0 ? (
+        <p className="timeline-empty">
+          Subtitle window empty state. Start a file run or system audio capture to begin streaming.
+        </p>
       ) : (
-        <ol className="timeline-list">
-          {subtitles.map((line) => {
-            const stateLabel = line.status === 'final' ? 'Stable' : 'Draft'
-            const isRevised = line.revisionCount > 0
-
-            return (
-              <li
-                key={line.id}
-                className={`timeline-item${isRevised ? ' timeline-item-revised' : ''}`}
-              >
-                <div className="timeline-meta">
+        <div ref={scrollerRef} className="subtitle-window-scroller">
+          <ol className="subtitle-window-feed">
+            {subtitleBlocks.map((block) => (
+              <li key={block.id} className={`subtitle-window-block subtitle-window-block-${block.status}`}>
+                <div className="subtitle-window-meta">
                   <span className="timeline-time">
-                    {formatTimestamp(line.startMs)} - {formatTimestamp(line.endMs)}
+                    {formatTimestamp(block.startMs)} - {formatTimestamp(block.endMs)}
                   </span>
-                  <span className={`timeline-state timeline-state-${line.status}`}>{stateLabel}</span>
+                  <span className={`timeline-state timeline-state-${block.status}`}>
+                    {getStateLabel(block.status)}
+                  </span>
                 </div>
-                <p className="timeline-chinese">{line.chinese || 'Waiting for translation...'}</p>
-                <p className="timeline-english">
-                  {line.english || 'Listening for the next transcript chunk...'}
-                </p>
-                {isRevised ? <p className="timeline-revision">Revision count: {line.revisionCount}</p> : null}
+                <p className="subtitle-window-translation">{getDisplayTranslation(block)}</p>
+                <p className="subtitle-window-transcript">{getDisplayTranscript(block)}</p>
               </li>
-            )
-          })}
-        </ol>
+            ))}
+          </ol>
+        </div>
       )}
     </section>
   )

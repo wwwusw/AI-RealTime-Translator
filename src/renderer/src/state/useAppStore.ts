@@ -3,26 +3,18 @@ import type { AppConfigBridge } from '../../../shared/app-config-bridge'
 import { defaultAppConfig, type AppConfig } from '../../../shared/config'
 import type {
   PipelineEvent,
+  SubtitleBlock,
   PipelineTaskStage,
   PipelineTaskStatus,
   PipelineTasksBridge
 } from '../../../shared/pipeline'
-import type { SubtitleStatus } from '../../../shared/subtitles'
 import {
   startSystemAudioCapture,
   type SystemAudioCaptureHandle,
   type SystemAudioStopMode
 } from '../system-audio-capture'
 
-export type TimelineSubtitle = {
-  id: string
-  startMs: number
-  endMs: number
-  english: string
-  chinese: string
-  status: SubtitleStatus
-  revisionCount: number
-}
+export type TimelineSubtitleBlock = SubtitleBlock
 
 export type TimelineMode = 'empty' | 'live'
 
@@ -46,7 +38,7 @@ type AppStore = {
   isRunning: boolean
   canStart: boolean
   lastRevisionSummary: string
-  subtitles: TimelineSubtitle[]
+  subtitleBlocks: TimelineSubtitleBlock[]
   timelineMode: TimelineMode
   hydrateConfig: () => Promise<void>
   saveConfig: (config: AppConfig) => Promise<void>
@@ -107,50 +99,60 @@ const createTaskState = (status?: PipelineTaskStatus): AppStoreTaskState => ({
   timelineMode: status?.sourceLabel || status?.filePath ? 'live' : 'empty'
 })
 
-const upsertSubtitle = (
-  subtitles: TimelineSubtitle[],
-  nextSubtitle: TimelineSubtitle
-): TimelineSubtitle[] => {
-  const existingIndex = subtitles.findIndex((subtitle) => subtitle.id === nextSubtitle.id)
+const trimBlockWindow = (blocks: TimelineSubtitleBlock[]): TimelineSubtitleBlock[] =>
+  blocks.slice(-6)
+
+const upsertBlock = (
+  blocks: TimelineSubtitleBlock[],
+  nextBlock: TimelineSubtitleBlock
+): TimelineSubtitleBlock[] => {
+  const existingIndex = blocks.findIndex((block) => block.id === nextBlock.id)
 
   if (existingIndex === -1) {
-    return [...subtitles, nextSubtitle]
+    return trimBlockWindow([...blocks, nextBlock])
   }
 
-  return subtitles.map((subtitle, index) => (index === existingIndex ? nextSubtitle : subtitle))
+  return trimBlockWindow(blocks.map((block, index) => (index === existingIndex ? nextBlock : block)))
 }
 
-const applyPipelineEventToSubtitles = (
-  subtitles: TimelineSubtitle[],
+const applyPipelineEventToBlocks = (
+  blocks: TimelineSubtitleBlock[],
   event: PipelineEvent
-): TimelineSubtitle[] => {
+): TimelineSubtitleBlock[] => {
   switch (event.type) {
+    case 'subtitle-blocks-updated':
+      return trimBlockWindow(event.blocks)
     case 'subtitle-pending':
     case 'subtitle-added':
-      return upsertSubtitle(subtitles, {
+      return upsertBlock(blocks, {
         id: event.subtitle.id,
+        index: event.chunk.index,
         startMs: event.chunk.startMs,
         endMs: event.chunk.endMs,
-        english: event.subtitle.english,
-        chinese: event.subtitle.chinese,
-        status: event.subtitle.status,
-        revisionCount: event.subtitle.revisionCount
+        sourceTranscript: event.subtitle.english,
+        liveTranslation: event.subtitle.chinese,
+        refinedTranslation: event.subtitle.status === 'final' ? event.subtitle.chinese : '',
+        status: event.subtitle.status === 'final' ? 'refined' : 'pending_refine',
+        updatedAt: event.subtitle.updatedAt
       })
     case 'subtitle-revised':
-      return subtitles.map((subtitle) =>
-        subtitle.id === event.subtitle.id
+      return trimBlockWindow(
+        blocks.map((block) =>
+          block.id === event.subtitle.id
           ? {
-              ...subtitle,
-              english: event.subtitle.english,
-              chinese: event.subtitle.chinese,
-              status: event.subtitle.status,
-              revisionCount: event.subtitle.revisionCount
+              ...block,
+              sourceTranscript: event.subtitle.english,
+              liveTranslation: event.subtitle.chinese,
+              refinedTranslation: event.subtitle.chinese,
+              status: 'refined',
+              updatedAt: event.subtitle.updatedAt
             }
-          : subtitle
+          : block
+        )
       )
     case 'pipeline-completed':
     default:
-      return subtitles
+      return blocks
   }
 }
 
@@ -189,7 +191,7 @@ const stopSystemAudioCapture = async (mode: SystemAudioStopMode) => {
 export const useAppStore = create<AppStore>((set, get) => ({
   config: defaultAppConfig,
   ...createTaskState(),
-  subtitles: [],
+  subtitleBlocks: [],
   hydrateConfig: async () => {
     const appConfigBridge = getAppConfigBridge()
     const pipelineTasksBridge = getPipelineTasksBridge()
@@ -200,7 +202,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     ensurePipelineSubscription(pipelineTasksBridge, (event) => {
       set((state) => ({
-        subtitles: applyPipelineEventToSubtitles(state.subtitles, event)
+        subtitleBlocks: applyPipelineEventToBlocks(state.subtitleBlocks, event)
       }))
     })
 
@@ -212,7 +214,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({
       config,
       ...createTaskState(taskStatus),
-      subtitles: taskStatus?.sourceLabel || taskStatus?.filePath ? [] : get().subtitles
+      subtitleBlocks: taskStatus?.sourceLabel || taskStatus?.filePath ? [] : get().subtitleBlocks
     })
   },
   saveConfig: async (config) => {
@@ -243,7 +245,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const status = await bridge.getTaskStatus()
       set({
         ...createTaskState(status),
-        subtitles: []
+        subtitleBlocks: []
       })
     } catch (error) {
       set({
@@ -264,12 +266,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
         const status = await bridge.startSystemAudioTask()
         set({
           ...createTaskState(status),
-          subtitles: []
+          subtitleBlocks: []
         })
 
         try {
           activeSystemAudioCapture = await startSystemAudioCapture({
-            chunkDurationMs: get().config.chunkDurationMs,
+            blockDurationMs: get().config.blockDurationMs,
             onChunk: async (chunk) => {
               await bridge.pushSystemAudioChunk?.(chunk)
             },
@@ -288,7 +290,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
               set((state) => ({
                 ...createTaskState(nextStatus),
-                subtitles: mode === 'reset' ? [] : state.subtitles,
+                subtitleBlocks: mode === 'reset' ? [] : state.subtitleBlocks,
                 lastRevisionSummary: pendingCaptureSummary ?? nextStatus.lastRevisionSummary
               }))
               pendingCaptureSummary = null
@@ -301,7 +303,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
           const resetStatus = await bridge.resetTask()
           set({
             ...createTaskState(resetStatus),
-            subtitles: [],
+            subtitleBlocks: [],
             lastRevisionSummary: `System audio capture failed: ${summarizeError(error)}`
           })
         }
@@ -312,7 +314,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const status = await bridge.startTask(get().filePath)
       set({
         ...createTaskState(status),
-        subtitles: []
+        subtitleBlocks: []
       })
     } catch (error) {
       set({
@@ -331,7 +333,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const status = await bridge.pauseTask()
       set((state) => ({
         ...createTaskState(status),
-        subtitles: state.subtitles
+        subtitleBlocks: state.subtitleBlocks
       }))
     } catch (error) {
       set({
@@ -355,7 +357,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     if (!bridge) {
       set({
         ...createTaskState(),
-        subtitles: [],
+        subtitleBlocks: [],
         lastRevisionSummary: bridgeUnavailableSummary
       })
       return
@@ -365,7 +367,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const status = await bridge.resetTask()
       set({
         ...createTaskState(status),
-        subtitles: []
+        subtitleBlocks: []
       })
     } catch (error) {
       set({

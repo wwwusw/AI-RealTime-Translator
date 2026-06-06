@@ -27,16 +27,20 @@ const createFakeStore = (initialConfig?: unknown): FakeStore => {
 describe('config store', () => {
   it('loads a partial persisted config without dropping defaults', () => {
     const store = createFakeStore({
-      translation: {
+      refiner: {
         apiKey: 'secret'
+      },
+      liveTranslate: {
+        targetLanguage: 'ja'
       }
     })
 
     const configStore = createConfigStore(store)
     const loaded = configStore.loadConfig()
 
-    expect(loaded.translation.apiKey).toBe('secret')
-    expect(loaded.translation.baseUrl).toBe(defaultAppConfig.translation.baseUrl)
+    expect(loaded.refiner.apiKey).toBe('secret')
+    expect(loaded.refiner.baseUrl).toBe(defaultAppConfig.refiner.baseUrl)
+    expect(loaded.liveTranslate.targetLanguage).toBe('ja')
     expect(loaded.asr).toEqual(defaultAppConfig.asr)
   })
 
@@ -45,13 +49,13 @@ describe('config store', () => {
     const configStore = createConfigStore(store)
 
     const saved = configStore.saveConfig({
-      translation: {
+      refiner: {
         model: 'deepseek-v4-pro'
       }
     })
 
-    expect(saved.translation.model).toBe('deepseek-v4-pro')
-    expect(saved.translation.baseUrl).toBe(defaultAppConfig.translation.baseUrl)
+    expect(saved.refiner.model).toBe('deepseek-v4-pro')
+    expect(saved.refiner.baseUrl).toBe(defaultAppConfig.refiner.baseUrl)
     expect(store.data.config).toEqual(saved)
   })
 })

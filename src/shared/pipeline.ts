@@ -12,6 +12,10 @@ export const pipelineTaskChannels = {
   pipelineEvent: 'pipeline:event'
 } as const
 
+export const SUBTITLE_BLOCK_WINDOW_SIZE = 6
+export const SUBTITLE_BLOCK_REFINED_CONTEXT_SIZE = 3
+export const SUBTITLE_BLOCK_PENDING_BATCH_SIZE = 2
+
 export type ImportedMediaFile = {
   filePath: string
 }
@@ -61,6 +65,25 @@ export type ChunkPlanningInput = {
   chunkOverlapMs: number
 }
 
+export type SubtitleBlockStatus = 'live' | 'pending_refine' | 'refined'
+
+export type SubtitleBlock = {
+  id: string
+  index: number
+  startMs: number
+  endMs: number
+  sourceTranscript: string
+  liveTranslation: string
+  refinedTranslation: string
+  status: SubtitleBlockStatus
+  updatedAt: number
+}
+
+export type SubtitleBlocksUpdatedEvent = {
+  type: 'subtitle-blocks-updated'
+  blocks: SubtitleBlock[]
+}
+
 export type PipelineSubtitleAddedEvent = {
   type: 'subtitle-added'
   chunk: PlannedChunk
@@ -84,6 +107,7 @@ export type PipelineCompletedEvent = {
 }
 
 export type PipelineEvent =
+  | SubtitleBlocksUpdatedEvent
   | PipelineSubtitlePendingEvent
   | PipelineSubtitleAddedEvent
   | PipelineSubtitleRevisedEvent

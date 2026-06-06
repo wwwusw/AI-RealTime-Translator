@@ -1,6 +1,7 @@
 type StatusBarProps = {
   inputMode: 'file' | 'system-audio'
-  translationModel: string
+  liveTranslateModel: string
+  refinerModel: string
   asrProvider: string
   stageLabel: string
   lastRevisionSummary: string
@@ -8,7 +9,8 @@ type StatusBarProps = {
 
 export function StatusBar({
   inputMode,
-  translationModel,
+  liveTranslateModel,
+  refinerModel,
   asrProvider,
   stageLabel,
   lastRevisionSummary
@@ -17,8 +19,12 @@ export function StatusBar({
     <section className="status-bar" aria-label="Task status">
       <dl className="status-grid">
         <div>
-          <dt>Translation Model</dt>
-          <dd>{translationModel}</dd>
+          <dt>Live Translate Model</dt>
+          <dd>{liveTranslateModel}</dd>
+        </div>
+        <div>
+          <dt>Refiner Model</dt>
+          <dd>{refinerModel}</dd>
         </div>
         <div>
           <dt>ASR Provider</dt>

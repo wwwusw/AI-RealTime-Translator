@@ -15,7 +15,11 @@ import { preparePipelineChunks } from '../services/pipeline-media-prep'
 import { runPipeline } from '../services/pipeline-runner'
 import { createDashScopeRealtimeAsrProvider } from '../services/providers/dashscope-realtime-asr-provider'
 import { createOpenAiAudioAsrProvider } from '../services/providers/openai-audio-asr-provider'
-import { createOpenAiChatTranslationProvider } from '../services/providers/openai-chat-translation-provider'
+import {
+  createOpenAiChatRefinementProvider,
+  createOpenAiChatTranslationProvider
+} from '../services/providers/openai-chat-translation-provider'
+import { createQwenLiveTranslateRealtimeProvider } from '../services/providers/qwen-live-translate-realtime-provider'
 import { createScriptedAsrProvider } from '../services/providers/scripted-asr-provider'
 import {
   createSystemAudioPipelineSession,
@@ -95,6 +99,26 @@ const createAsrProvider = (config: AppConfig) => {
 
 const createRevisionSummary = (event: PipelineEvent): string | null => {
   switch (event.type) {
+    case 'subtitle-blocks-updated': {
+      const latestBlock = [...event.blocks]
+        .reverse()
+        .find(
+          (block) =>
+            block.refinedTranslation.trim().length > 0 ||
+            block.liveTranslation.trim().length > 0 ||
+            block.sourceTranscript.trim().length > 0
+        )
+
+      if (!latestBlock) {
+        return 'Listening for the next live translation block.'
+      }
+
+      return `Live subtitle: ${
+        latestBlock.refinedTranslation ||
+        latestBlock.liveTranslation ||
+        latestBlock.sourceTranscript
+      }`
+    }
     case 'subtitle-revised':
       return `Latest revision: ${event.subtitle.chinese}`
     case 'subtitle-pending':
@@ -132,7 +156,7 @@ const broadcastPipelineEvent = (event: PipelineEvent) => {
 
 const startPipelineRun = (filePath: string, config: AppConfig): PipelineTaskStatus => {
   const controller = new AbortController()
-  const translationProvider = createOpenAiChatTranslationProvider(config.translation)
+  const translationProvider = createOpenAiChatTranslationProvider(config.refiner)
   const asrProvider = createAsrProvider(config)
 
   setTaskStatus(
@@ -237,8 +261,8 @@ const startPipelineRun = (filePath: string, config: AppConfig): PipelineTaskStat
 
 const startSystemAudioRun = async (config: AppConfig): Promise<PipelineTaskStatus> => {
   const controller = new AbortController()
-  const translationProvider = createOpenAiChatTranslationProvider(config.translation)
-  const asrProvider = createAsrProvider(config)
+  const refinementProvider = createOpenAiChatRefinementProvider(config.refiner)
+  const liveTranslateProvider = createQwenLiveTranslateRealtimeProvider(config.liveTranslate)
   const sourceLabel = 'System audio capture'
 
   setTaskStatus(
@@ -253,9 +277,11 @@ const startSystemAudioRun = async (config: AppConfig): Promise<PipelineTaskStatu
 
   try {
     const session = await createSystemAudioPipelineSession({
-      asrProvider,
-      translationProvider,
-      revisionWindowSize: config.revisionWindowSize,
+      liveTranslateProvider,
+      refinementProvider,
+      blockDurationMs: config.blockDurationMs,
+      sourceLanguage: config.liveTranslate.sourceLanguage,
+      targetLanguage: config.liveTranslate.targetLanguage,
       signal: controller.signal,
       emitEvent: (event) => {
         broadcastPipelineEvent(event)

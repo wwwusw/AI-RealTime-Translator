@@ -64,91 +64,91 @@ describe('useAppStore task controls', () => {
 
     await useAppStore.getState().hydrateConfig()
     expect(useAppStore.getState().timelineMode).toBe('live')
-    expect(useAppStore.getState().subtitles).toEqual([])
+    expect(useAppStore.getState().subtitleBlocks).toEqual([])
 
     await useAppStore.getState().start()
 
     eventListeners[0]?.({
-      type: 'subtitle-pending',
-      chunk: {
+      type: 'subtitle-blocks-updated',
+      blocks: [
+        {
+          id: 'block-0',
+          index: 0,
+          startMs: 0,
+          endMs: 2_000,
+          sourceTranscript: 'hello conference',
+          liveTranslation: '实时翻译 0',
+          refinedTranslation: '',
+          status: 'live',
+          updatedAt: 0
+        }
+      ]
+    })
+
+    expect(useAppStore.getState().subtitleBlocks).toEqual([
+      {
+        id: 'block-0',
         index: 0,
         startMs: 0,
-        endMs: 5_000,
-        filePath: 'fixtures/chunk-0.wav'
-      },
-      subtitle: {
-        id: 'chunk-0',
-        english: '',
-        chinese: '',
-        status: 'draft',
-        revisionCount: 0,
+        endMs: 2_000,
+        sourceTranscript: 'hello conference',
+        liveTranslation: '实时翻译 0',
+        refinedTranslation: '',
+        status: 'live',
         updatedAt: 0
       }
-    })
-
-    expect(useAppStore.getState().subtitles).toEqual([
-      {
-        id: 'chunk-0',
-        startMs: 0,
-        endMs: 5_000,
-        english: '',
-        chinese: '',
-        status: 'draft',
-        revisionCount: 0
-      }
     ])
 
     eventListeners[0]?.({
-      type: 'subtitle-added',
-      chunk: {
+      type: 'subtitle-blocks-updated',
+      blocks: [
+        {
+          id: 'block-0',
+          index: 0,
+          startMs: 0,
+          endMs: 2_000,
+          sourceTranscript: 'hello conference',
+          liveTranslation: '实时翻译 0',
+          refinedTranslation: '精翻 0',
+          status: 'refined',
+          updatedAt: 1
+        },
+        {
+          id: 'block-1',
+          index: 1,
+          startMs: 2_000,
+          endMs: 4_000,
+          sourceTranscript: 'next sentence',
+          liveTranslation: '实时翻译 1',
+          refinedTranslation: '',
+          status: 'pending_refine',
+          updatedAt: 1
+        }
+      ]
+    })
+
+    expect(useAppStore.getState().subtitleBlocks).toEqual([
+      {
+        id: 'block-0',
         index: 0,
         startMs: 0,
-        endMs: 5_000,
-        filePath: 'fixtures/chunk-0.wav'
-      },
-      subtitle: {
-        id: 'chunk-0',
-        english: 'hello conference',
-        chinese: 'draft translation',
-        status: 'draft',
-        revisionCount: 0,
+        endMs: 2_000,
+        sourceTranscript: 'hello conference',
+        liveTranslation: '实时翻译 0',
+        refinedTranslation: '精翻 0',
+        status: 'refined',
         updatedAt: 1
-      }
-    })
-
-    expect(useAppStore.getState().subtitles).toEqual([
+      },
       {
-        id: 'chunk-0',
-        startMs: 0,
-        endMs: 5_000,
-        english: 'hello conference',
-        chinese: 'draft translation',
-        status: 'draft',
-        revisionCount: 0
-      }
-    ])
-
-    eventListeners[0]?.({
-      type: 'subtitle-revised',
-      subtitle: {
-        id: 'chunk-0',
-        english: 'hello conference',
-        chinese: 'revised translation',
-        status: 'final',
-        revisionCount: 1,
-        updatedAt: 2
-      }
-    })
-
-    expect(useAppStore.getState().subtitles).toEqual([
-      {
-        id: 'chunk-0',
-        startMs: 0,
-        endMs: 5_000,
-        english: 'hello conference',
-        chinese: 'revised translation',
-        status: 'final',
-        revisionCount: 1
+        id: 'block-1',
+        index: 1,
+        startMs: 2_000,
+        endMs: 4_000,
+        sourceTranscript: 'next sentence',
+        liveTranslation: '实时翻译 1',
+        refinedTranslation: '',
+        status: 'pending_refine',
+        updatedAt: 1
       }
     ])
   })
@@ -286,6 +286,11 @@ describe('useAppStore task controls', () => {
 
     expect(window.pipelineTasks.startSystemAudioTask).toHaveBeenCalledOnce()
     expect(startSystemAudioCaptureMock).toHaveBeenCalledOnce()
+    expect(startSystemAudioCaptureMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        blockDurationMs: defaultAppConfig.blockDurationMs
+      })
+    )
     expect(useAppStore.getState().isRunning).toBe(true)
     expect(useAppStore.getState().sourceLabel).toBe('System audio capture')
 
@@ -309,10 +314,10 @@ describe('useAppStore task controls', () => {
     const { useAppStore } = await import('../../src/renderer/src/state/useAppStore')
 
     await useAppStore.getState().hydrateConfig()
-    expect(useAppStore.getState().subtitles).toEqual([])
+    expect(useAppStore.getState().subtitleBlocks).toEqual([])
 
     await useAppStore.getState().reset()
-    expect(useAppStore.getState().subtitles).toEqual([])
+    expect(useAppStore.getState().subtitleBlocks).toEqual([])
   })
 
   it('keeps the real timeline empty before subtitle events arrive even when a file is present', async () => {
@@ -340,7 +345,7 @@ describe('useAppStore task controls', () => {
 
     await useAppStore.getState().hydrateConfig()
     expect(useAppStore.getState().timelineMode).toBe('live')
-    expect(useAppStore.getState().subtitles).toEqual([])
+    expect(useAppStore.getState().subtitleBlocks).toEqual([])
   })
 
   it('persists provider configuration changes through the config bridge', async () => {
