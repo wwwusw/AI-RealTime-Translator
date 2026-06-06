@@ -1,8 +1,11 @@
+import type { BrowserWindow } from 'electron'
 import { dialog } from 'electron'
 import type { ImportedMediaFile } from '../../shared/pipeline'
 
-export const pickMediaFile = async (): Promise<ImportedMediaFile | null> => {
-  const result = await dialog.showOpenDialog({
+export const pickMediaFile = async (
+  parentWindow?: BrowserWindow | null
+): Promise<ImportedMediaFile | null> => {
+  const result = await dialog.showOpenDialog(parentWindow ?? undefined, {
     title: 'Select media file',
     properties: ['openFile'],
     filters: [

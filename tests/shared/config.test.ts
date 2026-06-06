@@ -5,6 +5,7 @@ describe('config defaults', () => {
   it('uses DeepSeek defaults for translation and scripted ASR for local development', () => {
     expect(defaultAppConfig.translation.baseUrl).toBe('https://api.deepseek.com')
     expect(defaultAppConfig.translation.model).toBe('deepseek-v4-flash')
+    expect(defaultAppConfig.translation.apiKey).toBe('')
     expect(defaultAppConfig.asr.provider).toBe('scripted')
   })
 
@@ -42,15 +43,16 @@ describe('config defaults', () => {
         apiKey: 'demo-key'
       },
       asr: {
-        model: 'whisper-like'
+        provider: 'dashscope-realtime',
+        model: 'qwen3-asr-flash-realtime'
       }
     })
 
     expect(merged.translation.apiKey).toBe('demo-key')
     expect(merged.translation.baseUrl).toBe(defaultAppConfig.translation.baseUrl)
     expect(merged.translation.model).toBe(defaultAppConfig.translation.model)
-    expect(merged.asr.model).toBe('whisper-like')
-    expect(merged.asr.provider).toBe(defaultAppConfig.asr.provider)
+    expect(merged.asr.provider).toBe('dashscope-realtime')
+    expect(merged.asr.model).toBe('qwen3-asr-flash-realtime')
     expect(merged.asr.baseUrl).toBe(defaultAppConfig.asr.baseUrl)
   })
 

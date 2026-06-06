@@ -50,6 +50,7 @@ type AppStore = {
 }
 
 let unsubscribeFromPipelineEvents: (() => void) | null = null
+const bridgeUnavailableSummary = 'Desktop bridge unavailable. Start the app through Electron.'
 
 const getAppConfigBridge = (): AppConfigBridge | undefined => {
   if (typeof window === 'undefined') {
@@ -82,6 +83,9 @@ const getStageLabel = (stage: PipelineTaskStage): string => {
       return 'Idle'
   }
 }
+
+const summarizeError = (error: unknown): string =>
+  error instanceof Error ? error.message : 'unknown error'
 
 const createTaskState = (status?: PipelineTaskStatus): AppStoreTaskState => ({
   filePath: status?.filePath ?? null,
@@ -182,59 +186,88 @@ export const useAppStore = create<AppStore>((set, get) => ({
   pick: async () => {
     const bridge = getPipelineTasksBridge()
     if (!bridge) {
+      set({ lastRevisionSummary: bridgeUnavailableSummary })
       return
     }
 
-    const file = await bridge.pickMediaFile()
+    try {
+      const file = await bridge.pickMediaFile()
 
-    if (!file) {
-      return
+      if (!file) {
+        set({ lastRevisionSummary: 'File selection was cancelled.' })
+        return
+      }
+
+      const status = await bridge.getTaskStatus()
+      set({
+        ...createTaskState(status),
+        subtitles: []
+      })
+    } catch (error) {
+      set({
+        lastRevisionSummary: `File selection failed: ${summarizeError(error)}`
+      })
     }
-
-    const status = await bridge.getTaskStatus()
-    set({
-      ...createTaskState(status),
-      subtitles: []
-    })
   },
   start: async () => {
     const bridge = getPipelineTasksBridge()
     if (!bridge) {
+      set({ lastRevisionSummary: bridgeUnavailableSummary })
       return
     }
 
-    const status = await bridge.startTask(get().filePath)
-    set({
-      ...createTaskState(status),
-      subtitles: []
-    })
+    try {
+      const status = await bridge.startTask(get().filePath)
+      set({
+        ...createTaskState(status),
+        subtitles: []
+      })
+    } catch (error) {
+      set({
+        lastRevisionSummary: `Task start failed: ${summarizeError(error)}`
+      })
+    }
   },
   pause: async () => {
     const bridge = getPipelineTasksBridge()
     if (!bridge) {
+      set({ lastRevisionSummary: bridgeUnavailableSummary })
       return
     }
 
-    const status = await bridge.pauseTask()
-    set((state) => ({
-      ...createTaskState(status),
-      subtitles: state.subtitles
-    }))
+    try {
+      const status = await bridge.pauseTask()
+      set((state) => ({
+        ...createTaskState(status),
+        subtitles: state.subtitles
+      }))
+    } catch (error) {
+      set({
+        lastRevisionSummary: `Task pause failed: ${summarizeError(error)}`
+      })
+    }
   },
   reset: async () => {
     const bridge = getPipelineTasksBridge()
     if (!bridge) {
       set({
         ...createTaskState(),
-        subtitles: []
+        subtitles: [],
+        lastRevisionSummary: bridgeUnavailableSummary
       })
       return
     }
 
-    const status = await bridge.resetTask()
-    set({
-      ...createTaskState(status),
-      subtitles: []
-    })
+    try {
+      const status = await bridge.resetTask()
+      set({
+        ...createTaskState(status),
+        subtitles: []
+      })
+    } catch (error) {
+      set({
+        lastRevisionSummary: `Task reset failed: ${summarizeError(error)}`
+      })
+    }
   }
 }))

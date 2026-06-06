@@ -86,6 +86,43 @@ dd {
   gap: 6px;
 }
 
+.settings-form {
+  display: grid;
+  gap: 16px;
+}
+
+.settings-field {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-field span {
+  font-weight: 600;
+  color: #6b5336;
+}
+
+.settings-field input,
+.settings-field select {
+  width: 100%;
+  border: 1px solid rgba(138, 92, 45, 0.24);
+  border-radius: 14px;
+  padding: 12px 14px;
+  font: inherit;
+  background: rgba(255, 255, 255, 0.96);
+  color: #1b1a18;
+}
+
+.settings-save-button {
+  justify-self: start;
+  border: 0;
+  border-radius: 999px;
+  padding: 12px 18px;
+  font: inherit;
+  color: #fffaf2;
+  background: #8a5c2d;
+  cursor: pointer;
+}
+
 .settings-grid dt {
   font-weight: 600;
   color: #6b5336;

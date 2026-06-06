@@ -14,17 +14,19 @@ describe('App', () => {
     expect(html).not.toContain('Revision count:')
   })
 
-  it('shows a settings summary panel with translation defaults', () => {
+  it('shows an editable settings panel with ASR and translation fields', () => {
     const html = renderToStaticMarkup(createElement(App))
 
     expect(html).toContain('Provider Settings')
     expect(html).toContain('ASR Provider')
     expect(html).toContain('scripted')
+    expect(html).toContain('ASR Base URL')
+    expect(html).toContain('ASR Model')
+    expect(html).toContain('Translation API Key')
     expect(html).toContain('Translation Base URL')
     expect(html).toContain('https://api.deepseek.com')
     expect(html).toContain('Translation Model')
     expect(html).toContain('deepseek-v4-flash')
-    expect(html).toContain('Translation API Key')
-    expect(html).toContain('Not set')
+    expect(html).toContain('Save Settings')
   })
 })
