@@ -13,6 +13,7 @@ const createScriptedAsrProviderMock = vi.fn()
 const createOpenAiAudioAsrProviderMock = vi.fn()
 const createDashScopeRealtimeAsrProviderMock = vi.fn()
 const createOpenAiChatTranslationProviderMock = vi.fn()
+const createSystemAudioPipelineSessionMock = vi.fn()
 
 vi.mock('electron', () => ({
   BrowserWindow: {
@@ -64,6 +65,10 @@ vi.mock('../../src/main/services/providers/openai-chat-translation-provider', ()
   createOpenAiChatTranslationProvider: createOpenAiChatTranslationProviderMock
 }))
 
+vi.mock('../../src/main/services/system-audio-session', () => ({
+  createSystemAudioPipelineSession: createSystemAudioPipelineSessionMock
+}))
+
 const createAbortError = (): Error => {
   const error = new Error('Aborted')
   error.name = 'AbortError'
@@ -77,6 +82,7 @@ describe('registerTaskHandlers', () => {
     vi.clearAllMocks()
 
     loadConfigMock.mockReturnValue({
+      inputMode: 'file',
       translation: {
         baseUrl: 'https://api.deepseek.com',
         apiKey: 'translation-key',
@@ -124,10 +130,32 @@ describe('registerTaskHandlers', () => {
       translateBatch: vi.fn().mockResolvedValue([{ id: 'chunk-0', chinese: 'draft translation' }]),
       reviseBatch: vi.fn().mockResolvedValue([{ id: 'chunk-0', chinese: 'revised translation' }])
     })
+    createSystemAudioPipelineSessionMock.mockResolvedValue({
+      appendChunk: vi.fn().mockResolvedValue(undefined),
+      complete: vi.fn().mockResolvedValue(undefined),
+      abort: vi.fn().mockResolvedValue(undefined)
+    })
   })
 
   it('starts the pipeline with prepared chunks, forwards pipeline events to the window, and records the latest revision summary', async () => {
     runPipelineMock.mockImplementation(async ({ emitEvent }) => {
+      emitEvent({
+        type: 'subtitle-pending',
+        chunk: {
+          index: 0,
+          startMs: 0,
+          endMs: 5_000,
+          filePath: 'fixtures/chunk-0.wav'
+        },
+        subtitle: {
+          id: 'chunk-0',
+          english: '',
+          chinese: '',
+          status: 'draft',
+          revisionCount: 0,
+          updatedAt: 0
+        }
+      })
       emitEvent({
         type: 'subtitle-added',
         chunk: {
@@ -184,6 +212,8 @@ describe('registerTaskHandlers', () => {
     const startStatus = await startTask?.({}, 'fixtures/input.wav')
     expect(startStatus).toMatchObject({
       filePath: 'fixtures/input.wav',
+      inputMode: 'file',
+      sourceLabel: 'fixtures/input.wav',
       stage: 'running',
       isRunning: true
     })
@@ -233,6 +263,10 @@ describe('registerTaskHandlers', () => {
     )
     expect(browserWindowSendMock).toHaveBeenCalledWith(
       pipelineTaskChannels.pipelineEvent,
+      expect.objectContaining({ type: 'subtitle-pending' })
+    )
+    expect(browserWindowSendMock).toHaveBeenCalledWith(
+      pipelineTaskChannels.pipelineEvent,
       expect.objectContaining({ type: 'subtitle-added' })
     )
     expect(browserWindowSendMock).toHaveBeenCalledWith(
@@ -243,6 +277,7 @@ describe('registerTaskHandlers', () => {
 
   it('selects the DashScope realtime ASR provider when configured', async () => {
     loadConfigMock.mockReturnValue({
+      inputMode: 'file',
       translation: {
         baseUrl: 'https://api.deepseek.com',
         apiKey: 'translation-key',
@@ -275,6 +310,79 @@ describe('registerTaskHandlers', () => {
     expect(createScriptedAsrProviderMock).not.toHaveBeenCalled()
   })
 
+  it('starts a system-audio session and forwards captured chunks to the streaming pipeline', async () => {
+    loadConfigMock.mockReturnValue({
+      inputMode: 'system-audio',
+      translation: {
+        baseUrl: 'https://api.deepseek.com',
+        apiKey: 'translation-key',
+        model: 'deepseek-v4-flash'
+      },
+      asr: {
+        provider: 'dashscope-realtime',
+        baseUrl: 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime',
+        apiKey: 'dashscope-key',
+        model: 'qwen3-asr-flash-realtime'
+      },
+      revisionWindowSize: 4,
+      chunkDurationMs: 5000,
+      chunkOverlapMs: 1000
+    })
+    const appendChunk = vi.fn().mockResolvedValue(undefined)
+    const complete = vi.fn().mockResolvedValue(undefined)
+    createSystemAudioPipelineSessionMock.mockResolvedValue({
+      appendChunk,
+      complete,
+      abort: vi.fn().mockResolvedValue(undefined)
+    })
+
+    const { registerTaskHandlers } = await import('../../src/main/ipc/tasks')
+    registerTaskHandlers()
+
+    const startSystemAudioTask = handlers.get(pipelineTaskChannels.startSystemAudioTask)
+    const pushSystemAudioChunk = handlers.get(pipelineTaskChannels.pushSystemAudioChunk)
+    const completeSystemAudioTask = handlers.get(pipelineTaskChannels.completeSystemAudioTask)
+
+    const startStatus = await startSystemAudioTask?.()
+    expect(startStatus).toMatchObject({
+      inputMode: 'system-audio',
+      sourceLabel: 'System audio capture',
+      stage: 'running',
+      isRunning: true
+    })
+
+    await pushSystemAudioChunk?.({}, {
+      bytes: new Uint8Array([1, 2, 3]),
+      durationMs: 3000,
+      mimeType: 'audio/wav'
+    })
+    const completedStatus = await completeSystemAudioTask?.()
+
+    expect(completedStatus).toMatchObject({
+      inputMode: 'system-audio',
+      stage: 'completed',
+      isRunning: false,
+      canStart: true
+    })
+    expect(createDashScopeRealtimeAsrProviderMock).toHaveBeenCalledWith({
+      baseUrl: 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime',
+      apiKey: 'dashscope-key',
+      model: 'qwen3-asr-flash-realtime'
+    })
+    expect(createSystemAudioPipelineSessionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        revisionWindowSize: 4,
+        signal: expect.any(AbortSignal)
+      })
+    )
+    expect(appendChunk).toHaveBeenCalledWith({
+      bytes: new Uint8Array([1, 2, 3]),
+      durationMs: 3000,
+      mimeType: 'audio/wav'
+    })
+    expect(complete).toHaveBeenCalledOnce()
+  })
+
   it('opens the file picker for the sender window and stores the selected file as ready', async () => {
     const senderWindow = { id: 1 }
     browserWindowFromWebContentsMock.mockReturnValue(senderWindow)
@@ -292,6 +400,8 @@ describe('registerTaskHandlers', () => {
     expect(file).toEqual({ filePath: 'fixtures/input.wav' })
     await expect(getTaskStatus?.()).resolves.toMatchObject({
       filePath: 'fixtures/input.wav',
+      inputMode: 'file',
+      sourceLabel: 'fixtures/input.wav',
       stage: 'ready',
       canStart: true,
       lastRevisionSummary: 'File selected. Ready to start the task.'
@@ -350,6 +460,7 @@ describe('registerTaskHandlers', () => {
     expect(resetStatus).toMatchObject({
       stage: 'idle',
       filePath: null,
+      inputMode: 'file',
       isRunning: false,
       canStart: false
     })

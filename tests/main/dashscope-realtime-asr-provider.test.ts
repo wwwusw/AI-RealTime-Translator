@@ -218,4 +218,46 @@ describe('createDashScopeRealtimeAsrProvider', () => {
 
     await rm(workingDirectory, { recursive: true, force: true })
   })
+
+  it('resolves an empty transcript instead of failing the whole session when no text is returned', async () => {
+    const workingDirectory = await mkdtemp(join(tmpdir(), 'dashscope-asr-test-'))
+    const chunkFilePath = join(workingDirectory, 'chunk.wav')
+    await writeFile(chunkFilePath, createMono16kPcmWav(320))
+
+    vi.doMock('ws', () => ({
+      default: FakeWebSocket
+    }))
+    const { createDashScopeRealtimeAsrProvider } = await import(
+      '../../src/main/services/providers/dashscope-realtime-asr-provider'
+    )
+
+    const provider = createDashScopeRealtimeAsrProvider({
+      baseUrl: 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime',
+      apiKey: 'dashscope-key',
+      model: 'qwen3-asr-flash-realtime'
+    })
+
+    const transcriptionPromise = provider.transcribeChunk({
+      chunkIndex: 0,
+      filePath: chunkFilePath
+    })
+
+    await vi.waitFor(() => {
+      expect(FakeWebSocket.instances).toHaveLength(1)
+    })
+
+    const socket = FakeWebSocket.instances[0]
+    socket?.emitOpen()
+    socket?.emitMessage({ type: 'session.created' })
+    socket?.emitMessage({ type: 'session.updated' })
+    socket?.emitMessage({
+      type: 'conversation.item.input_audio_transcription.completed',
+      text: ''
+    })
+    socket?.emitMessage({ type: 'session.finished' })
+
+    await expect(transcriptionPromise).resolves.toBe('')
+
+    await rm(workingDirectory, { recursive: true, force: true })
+  })
 })

@@ -2,10 +2,12 @@ import { basename } from 'node:path'
 import { BrowserWindow, ipcMain } from 'electron'
 import type { AppConfig } from '../../shared/config'
 import {
+  type PipelineInputMode,
   pipelineTaskChannels,
   type PipelineEvent,
   type PipelineTaskStage,
-  type PipelineTaskStatus
+  type PipelineTaskStatus,
+  type SystemAudioChunkPayload
 } from '../../shared/pipeline'
 import { loadConfig } from '../services/config-store'
 import { pickMediaFile } from '../services/file-picker'
@@ -15,31 +17,55 @@ import { createDashScopeRealtimeAsrProvider } from '../services/providers/dashsc
 import { createOpenAiAudioAsrProvider } from '../services/providers/openai-audio-asr-provider'
 import { createOpenAiChatTranslationProvider } from '../services/providers/openai-chat-translation-provider'
 import { createScriptedAsrProvider } from '../services/providers/scripted-asr-provider'
+import {
+  createSystemAudioPipelineSession,
+  type SystemAudioPipelineSession
+} from '../services/system-audio-session'
 
-type RunningTask = {
+type FileRunningTask = {
+  kind: 'file'
   controller: AbortController
   promise: Promise<void>
 }
 
+type SystemAudioRunningTask = {
+  kind: 'system-audio'
+  controller: AbortController
+  session: SystemAudioPipelineSession
+}
+
+type RunningTask = FileRunningTask | SystemAudioRunningTask
+
 const buildTaskStatus = ({
   filePath,
+  inputMode,
+  sourceLabel,
   stage,
   lastRevisionSummary
 }: {
   filePath: string | null
+  inputMode: PipelineInputMode
+  sourceLabel: string | null
   stage: PipelineTaskStage
   lastRevisionSummary: string
 }): PipelineTaskStatus => ({
   filePath,
+  inputMode,
+  sourceLabel,
   stage,
   isRunning: stage === 'running',
-  canStart: filePath !== null && stage !== 'running',
+  canStart: (inputMode === 'system-audio' || filePath !== null) && stage !== 'running',
   lastRevisionSummary
 })
 
-const createIdleTaskStatus = (summary = 'No task has run yet.'): PipelineTaskStatus =>
+const createIdleTaskStatus = (
+  summary = 'No task has run yet.',
+  inputMode: PipelineInputMode = 'file'
+): PipelineTaskStatus =>
   buildTaskStatus({
     filePath: null,
+    inputMode,
+    sourceLabel: null,
     stage: 'idle',
     lastRevisionSummary: summary
   })
@@ -71,6 +97,8 @@ const createRevisionSummary = (event: PipelineEvent): string | null => {
   switch (event.type) {
     case 'subtitle-revised':
       return `Latest revision: ${event.subtitle.chinese}`
+    case 'subtitle-pending':
+      return 'Listening for the next subtitle chunk.'
     case 'subtitle-added':
       return `Draft subtitle: ${event.subtitle.english}`
     case 'pipeline-completed':
@@ -93,6 +121,9 @@ const setTaskStatus = (status: PipelineTaskStatus) => {
 const isAbortError = (error: unknown): boolean =>
   error instanceof Error && error.name === 'AbortError'
 
+const isSystemAudioTask = (task: RunningTask | null): task is SystemAudioRunningTask =>
+  task?.kind === 'system-audio'
+
 const broadcastPipelineEvent = (event: PipelineEvent) => {
   for (const window of BrowserWindow.getAllWindows()) {
     window.webContents.send(pipelineTaskChannels.pipelineEvent, event)
@@ -107,6 +138,8 @@ const startPipelineRun = (filePath: string, config: AppConfig): PipelineTaskStat
   setTaskStatus(
     buildTaskStatus({
       filePath,
+      inputMode: 'file',
+      sourceLabel: filePath,
       stage: 'running',
       lastRevisionSummary: 'Task started. Waiting for pipeline events.'
     })
@@ -142,6 +175,8 @@ const startPipelineRun = (filePath: string, config: AppConfig): PipelineTaskStat
         setTaskStatus(
           buildTaskStatus({
             filePath: currentTaskStatus.filePath,
+            inputMode: 'file',
+            sourceLabel: currentTaskStatus.sourceLabel,
             stage: currentTaskStatus.stage,
             lastRevisionSummary: nextSummary
           })
@@ -157,6 +192,8 @@ const startPipelineRun = (filePath: string, config: AppConfig): PipelineTaskStat
       setTaskStatus(
         buildTaskStatus({
           filePath,
+          inputMode: 'file',
+          sourceLabel: filePath,
           stage: 'completed',
           lastRevisionSummary: currentTaskStatus.lastRevisionSummary
         })
@@ -175,6 +212,8 @@ const startPipelineRun = (filePath: string, config: AppConfig): PipelineTaskStat
       setTaskStatus(
         buildTaskStatus({
           filePath,
+          inputMode: 'file',
+          sourceLabel: filePath,
           stage: 'ready',
           lastRevisionSummary: `Task failed: ${message}`
         })
@@ -188,11 +227,96 @@ const startPipelineRun = (filePath: string, config: AppConfig): PipelineTaskStat
     })
 
   runningTask = {
+    kind: 'file',
     controller,
     promise
   }
 
   return currentTaskStatus
+}
+
+const startSystemAudioRun = async (config: AppConfig): Promise<PipelineTaskStatus> => {
+  const controller = new AbortController()
+  const translationProvider = createOpenAiChatTranslationProvider(config.translation)
+  const asrProvider = createAsrProvider(config)
+  const sourceLabel = 'System audio capture'
+
+  setTaskStatus(
+    buildTaskStatus({
+      filePath: null,
+      inputMode: 'system-audio',
+      sourceLabel,
+      stage: 'running',
+      lastRevisionSummary: 'System audio capture is live. Waiting for the first chunk.'
+    })
+  )
+
+  try {
+    const session = await createSystemAudioPipelineSession({
+      asrProvider,
+      translationProvider,
+      revisionWindowSize: config.revisionWindowSize,
+      signal: controller.signal,
+      emitEvent: (event) => {
+        broadcastPipelineEvent(event)
+
+        const nextSummary = createRevisionSummary(event)
+        if (!nextSummary) {
+          return
+        }
+
+        setTaskStatus(
+          buildTaskStatus({
+            filePath: currentTaskStatus.filePath,
+            inputMode: 'system-audio',
+            sourceLabel,
+            stage: currentTaskStatus.stage,
+            lastRevisionSummary: nextSummary
+          })
+        )
+      }
+    })
+
+    runningTask = {
+      kind: 'system-audio',
+      controller,
+      session
+    }
+
+    return currentTaskStatus
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'unknown pipeline error'
+    return setTaskStatus(
+      buildTaskStatus({
+        filePath: null,
+        inputMode: 'system-audio',
+        sourceLabel,
+        stage: 'paused',
+        lastRevisionSummary: `Task failed: ${message}`
+      })
+    )
+  }
+}
+
+const failRunningTask = async (message: string) => {
+  const nextStatus = setTaskStatus(
+    buildTaskStatus({
+      filePath: currentTaskStatus.filePath,
+      inputMode: currentTaskStatus.inputMode,
+      sourceLabel: currentTaskStatus.sourceLabel,
+      stage: currentTaskStatus.inputMode === 'system-audio' ? 'paused' : 'ready',
+      lastRevisionSummary: `Task failed: ${message}`
+    })
+  )
+
+  if (isSystemAudioTask(runningTask)) {
+    const liveTask = runningTask
+    runningTask = null
+    liveTask.controller.abort()
+    await liveTask.session.abort()
+  }
+
+  return nextStatus
 }
 
 export const registerTaskHandlers = () => {
@@ -204,6 +328,8 @@ export const registerTaskHandlers = () => {
       setTaskStatus(
         buildTaskStatus({
           filePath: file.filePath,
+          inputMode: 'file',
+          sourceLabel: file.filePath,
           stage: 'ready',
           lastRevisionSummary: 'File selected. Ready to start the task.'
         })
@@ -213,7 +339,18 @@ export const registerTaskHandlers = () => {
     return file
   })
 
-  ipcMain.handle(pipelineTaskChannels.getTaskStatus, async () => currentTaskStatus)
+  ipcMain.handle(pipelineTaskChannels.getTaskStatus, async () => {
+    if (
+      currentTaskStatus.stage === 'idle' &&
+      currentTaskStatus.filePath === null &&
+      currentTaskStatus.sourceLabel === null
+    ) {
+      const inputMode = loadConfig().inputMode
+      return setTaskStatus(createIdleTaskStatus(currentTaskStatus.lastRevisionSummary, inputMode))
+    }
+
+    return currentTaskStatus
+  })
 
   ipcMain.handle(pipelineTaskChannels.startTask, async (_event, filePath: string | null) => {
     if (runningTask) {
@@ -230,17 +367,85 @@ export const registerTaskHandlers = () => {
     return startPipelineRun(nextFilePath, config)
   })
 
-  ipcMain.handle(pipelineTaskChannels.pauseTask, async () => {
-    if (currentTaskStatus.stage !== 'running' || !runningTask || !currentTaskStatus.filePath) {
+  ipcMain.handle(pipelineTaskChannels.startSystemAudioTask, async () => {
+    if (runningTask) {
       return currentTaskStatus
     }
 
-    runningTask.controller.abort()
+    const config = loadConfig()
+    return startSystemAudioRun(config)
+  })
+
+  ipcMain.handle(
+    pipelineTaskChannels.pushSystemAudioChunk,
+    async (_event, chunkPayload: SystemAudioChunkPayload) => {
+      if (!isSystemAudioTask(runningTask)) {
+        return
+      }
+
+      try {
+        await runningTask.session.appendChunk(chunkPayload)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'unknown pipeline error'
+        await failRunningTask(message)
+        throw error
+      }
+    }
+  )
+
+  ipcMain.handle(pipelineTaskChannels.completeSystemAudioTask, async () => {
+    if (!isSystemAudioTask(runningTask)) {
+      return currentTaskStatus
+    }
+
+    const liveTask = runningTask
     runningTask = null
+
+    try {
+      await liveTask.session.complete()
+
+      return setTaskStatus(
+        buildTaskStatus({
+          filePath: null,
+          inputMode: 'system-audio',
+          sourceLabel: currentTaskStatus.sourceLabel,
+          stage: 'completed',
+          lastRevisionSummary: currentTaskStatus.lastRevisionSummary
+        })
+      )
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'unknown pipeline error'
+      await liveTask.session.abort()
+      return setTaskStatus(
+        buildTaskStatus({
+          filePath: null,
+          inputMode: 'system-audio',
+          sourceLabel: currentTaskStatus.sourceLabel,
+          stage: 'paused',
+          lastRevisionSummary: `Task failed: ${message}`
+        })
+      )
+    }
+  })
+
+  ipcMain.handle(pipelineTaskChannels.pauseTask, async () => {
+    if (currentTaskStatus.stage !== 'running' || !runningTask) {
+      return currentTaskStatus
+    }
+
+    const taskToPause = runningTask
+    runningTask = null
+    taskToPause.controller.abort()
+
+    if (isSystemAudioTask(taskToPause)) {
+      await taskToPause.session.abort()
+    }
 
     return setTaskStatus(
       buildTaskStatus({
         filePath: currentTaskStatus.filePath,
+        inputMode: currentTaskStatus.inputMode,
+        sourceLabel: currentTaskStatus.sourceLabel,
         stage: 'paused',
         lastRevisionSummary: 'Task paused. The current pipeline run was aborted.'
       })
@@ -249,10 +454,15 @@ export const registerTaskHandlers = () => {
 
   ipcMain.handle(pipelineTaskChannels.resetTask, async () => {
     if (runningTask) {
-      runningTask.controller.abort()
+      const taskToReset = runningTask
       runningTask = null
+      taskToReset.controller.abort()
+
+      if (isSystemAudioTask(taskToReset)) {
+        await taskToReset.session.abort()
+      }
     }
 
-    return setTaskStatus(createIdleTaskStatus('Task reset. No file is selected.'))
+    return setTaskStatus(createIdleTaskStatus('Task reset. No file is selected.', loadConfig().inputMode))
   })
 }

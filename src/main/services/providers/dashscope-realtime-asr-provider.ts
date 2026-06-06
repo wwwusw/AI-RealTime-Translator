@@ -201,7 +201,7 @@ export const createDashScopeRealtimeAsrProvider = ({
 
           if (messageType === 'session.finished') {
             if (latestTranscript.length === 0) {
-              rejectWith(new Error('DashScope realtime ASR finished without a transcript'))
+              settle(() => resolve(''))
               return
             }
 
@@ -241,7 +241,7 @@ export const createDashScopeRealtimeAsrProvider = ({
           return
         }
 
-        rejectWith(new Error('DashScope realtime ASR connection closed before completion'))
+        settle(() => resolve(''))
       })
     })
   }

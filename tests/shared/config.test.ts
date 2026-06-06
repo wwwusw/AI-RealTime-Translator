@@ -3,6 +3,7 @@ import { defaultAppConfig, mergeConfig } from '../../src/shared/config'
 
 describe('config defaults', () => {
   it('uses DeepSeek defaults for translation and scripted ASR for local development', () => {
+    expect(defaultAppConfig.inputMode).toBe('file')
     expect(defaultAppConfig.translation.baseUrl).toBe('https://api.deepseek.com')
     expect(defaultAppConfig.translation.model).toBe('deepseek-v4-flash')
     expect(defaultAppConfig.translation.apiKey).toBe('')
@@ -39,6 +40,7 @@ describe('config defaults', () => {
 
   it('keeps sibling defaults when only one nested field is overridden', () => {
     const merged = mergeConfig({
+      inputMode: 'system-audio',
       translation: {
         apiKey: 'demo-key'
       },
@@ -49,6 +51,7 @@ describe('config defaults', () => {
     })
 
     expect(merged.translation.apiKey).toBe('demo-key')
+    expect(merged.inputMode).toBe('system-audio')
     expect(merged.translation.baseUrl).toBe(defaultAppConfig.translation.baseUrl)
     expect(merged.translation.model).toBe(defaultAppConfig.translation.model)
     expect(merged.asr.provider).toBe('dashscope-realtime')

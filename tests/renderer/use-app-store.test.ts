@@ -2,8 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultAppConfig } from '../../src/shared/config'
 import type { PipelineEvent, PipelineTaskStatus } from '../../src/shared/pipeline'
 
+const startSystemAudioCaptureMock = vi.fn()
+
+vi.mock('../../src/renderer/src/system-audio-capture', () => ({
+  startSystemAudioCapture: startSystemAudioCaptureMock
+}))
+
 const createStatus = (overrides: Partial<PipelineTaskStatus> = {}): PipelineTaskStatus => ({
   filePath: null,
+  inputMode: 'file',
+  sourceLabel: null,
   stage: 'idle',
   isRunning: false,
   canStart: false,
@@ -14,6 +22,7 @@ const createStatus = (overrides: Partial<PipelineTaskStatus> = {}): PipelineTask
 describe('useAppStore task controls', () => {
   beforeEach(() => {
     vi.resetModules()
+    vi.clearAllMocks()
   })
 
   it('hydrates an empty real timeline and applies subtitle events from the bridge', async () => {
@@ -58,6 +67,36 @@ describe('useAppStore task controls', () => {
     expect(useAppStore.getState().subtitles).toEqual([])
 
     await useAppStore.getState().start()
+
+    eventListeners[0]?.({
+      type: 'subtitle-pending',
+      chunk: {
+        index: 0,
+        startMs: 0,
+        endMs: 5_000,
+        filePath: 'fixtures/chunk-0.wav'
+      },
+      subtitle: {
+        id: 'chunk-0',
+        english: '',
+        chinese: '',
+        status: 'draft',
+        revisionCount: 0,
+        updatedAt: 0
+      }
+    })
+
+    expect(useAppStore.getState().subtitles).toEqual([
+      {
+        id: 'chunk-0',
+        startMs: 0,
+        endMs: 5_000,
+        english: '',
+        chinese: '',
+        status: 'draft',
+        revisionCount: 0
+      }
+    ])
 
     eventListeners[0]?.({
       type: 'subtitle-added',
@@ -182,6 +221,76 @@ describe('useAppStore task controls', () => {
     expect(useAppStore.getState().filePath).toBe(null)
     expect(useAppStore.getState().stageLabel).toBe('Idle')
     expect(useAppStore.getState().canStart).toBe(false)
+  })
+
+  it('starts and stops the renderer-side system audio capture flow', async () => {
+    const stop = vi.fn().mockResolvedValue(undefined)
+    startSystemAudioCaptureMock.mockResolvedValue({ stop })
+
+    window.appConfig = {
+      load: vi.fn().mockResolvedValue({
+        ...defaultAppConfig,
+        inputMode: 'system-audio' as const
+      }),
+      save: vi.fn().mockResolvedValue(defaultAppConfig)
+    }
+    window.pipelineTasks = {
+      pickMediaFile: vi.fn().mockResolvedValue(null),
+      getTaskStatus: vi.fn().mockResolvedValue(
+        createStatus({
+          inputMode: 'system-audio',
+          stage: 'idle',
+          canStart: true
+        })
+      ),
+      startTask: vi.fn().mockResolvedValue(createStatus()),
+      startSystemAudioTask: vi.fn().mockResolvedValue(
+        createStatus({
+          inputMode: 'system-audio',
+          sourceLabel: 'System audio capture',
+          stage: 'running',
+          isRunning: true,
+          canStart: false
+        })
+      ),
+      pushSystemAudioChunk: vi.fn().mockResolvedValue(undefined),
+      completeSystemAudioTask: vi.fn().mockResolvedValue(
+        createStatus({
+          inputMode: 'system-audio',
+          sourceLabel: 'System audio capture',
+          stage: 'completed',
+          isRunning: false,
+          canStart: true
+        })
+      ),
+      pauseTask: vi.fn().mockResolvedValue(
+        createStatus({
+          inputMode: 'system-audio',
+          sourceLabel: 'System audio capture',
+          stage: 'paused',
+          isRunning: false,
+          canStart: true
+        })
+      ),
+      resetTask: vi.fn().mockResolvedValue(
+        createStatus({
+          inputMode: 'system-audio'
+        })
+      )
+    }
+
+    const { useAppStore } = await import('../../src/renderer/src/state/useAppStore')
+
+    await useAppStore.getState().hydrateConfig()
+    await useAppStore.getState().start()
+
+    expect(window.pipelineTasks.startSystemAudioTask).toHaveBeenCalledOnce()
+    expect(startSystemAudioCaptureMock).toHaveBeenCalledOnce()
+    expect(useAppStore.getState().isRunning).toBe(true)
+    expect(useAppStore.getState().sourceLabel).toBe('System audio capture')
+
+    await useAppStore.getState().pause()
+    expect(stop).toHaveBeenCalledWith('pause')
   })
 
   it('keeps subtitles empty while idle or after a reset', async () => {
