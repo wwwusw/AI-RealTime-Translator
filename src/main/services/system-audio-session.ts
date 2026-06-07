@@ -152,6 +152,7 @@ export const createSystemAudioPipelineSession = async ({
   let queue = Promise.resolve()
   let refinementInFlight = false
   let finished = false
+  let activeRefinementPromise: Promise<void> | null = null
 
   const emitBlocks = () => {
     emitEvent(createBlocksUpdatedEvent(blocks))
@@ -274,6 +275,24 @@ export const createSystemAudioPipelineSession = async ({
     }
   }
 
+  const scheduleRefinement = () => {
+    if (refinementInFlight || activeRefinementPromise) {
+      return
+    }
+
+    const nextPromise = tryRefinePendingBlocks()
+      .catch((error) => {
+        console.error('Realtime subtitle refinement failed.', error)
+      })
+      .finally(() => {
+        if (activeRefinementPromise === nextPromise) {
+          activeRefinementPromise = null
+        }
+      })
+
+    activeRefinementPromise = nextPromise
+  }
+
   const handleLiveTranslateEvent = (event: LiveTranslateStreamEvent) => {
     let binding = itemBindings.get(event.itemId)
 
@@ -326,7 +345,7 @@ export const createSystemAudioPipelineSession = async ({
         ensureWritableLiveBlock()
         await liveTranslateSession.appendAudioChunk(payload, signal)
         totalAudioDurationMs += Math.max(1, Math.round(payload.durationMs))
-        await tryRefinePendingBlocks()
+        scheduleRefinement()
       })
 
       await queue
@@ -334,6 +353,7 @@ export const createSystemAudioPipelineSession = async ({
     complete: async () => {
       finished = true
       await queue
+      await activeRefinementPromise
       await liveTranslateSession.finish(signal)
 
       for (const block of blocks) {
