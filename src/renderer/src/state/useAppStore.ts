@@ -220,9 +220,33 @@ export const useAppStore = create<AppStore>((set, get) => ({
     }
 
     ensurePipelineSubscription(pipelineTasksBridge, (event) => {
-      set((state) => ({
-        subtitleBlocks: applyPipelineEventToBlocks(state.subtitleBlocks, event)
-      }))
+      set((state) => {
+        const nextBlocks = applyPipelineEventToBlocks(state.subtitleBlocks, event)
+        const taskPatch: Partial<AppStoreTaskState> = {}
+
+        if (event.type === 'subtitle-blocks-updated') {
+          const refinedCount = event.blocks.filter(
+            (b) => b.status === 'refined'
+          ).length
+          const totalCount = event.blocks.length
+          taskPatch.lastRevisionSummary = `正在实时翻译… 已精校 ${refinedCount}/${totalCount} 段`
+        }
+
+        if (event.type === 'pipeline-completed') {
+          taskPatch.stage = 'completed'
+          taskPatch.stageLabel = getStageLabel('completed')
+          taskPatch.isRunning = false
+          taskPatch.canStart = true
+          taskPatch.lastRevisionSummary = event.subtitles.length > 0
+            ? '处理已完成。'
+            : '处理已完成，但没有生成字幕。'
+        }
+
+        return {
+          subtitleBlocks: nextBlocks,
+          ...taskPatch
+        }
+      })
     })
 
     const config = await appConfigBridge.load()

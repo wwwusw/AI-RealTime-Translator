@@ -53,6 +53,7 @@ describe('createSystemAudioPipelineSession', () => {
       },
       refinementProvider,
       blockDurationMs: 2000,
+      targetLanguage: 'zh',
       emitEvent: (event) => {
         emittedEvents.push(event)
       }
@@ -179,6 +180,7 @@ describe('createSystemAudioPipelineSession', () => {
       },
       refinementProvider,
       blockDurationMs: 2000,
+      targetLanguage: 'zh',
       emitEvent: vi.fn()
     })
 
