@@ -50,8 +50,8 @@ Saving a different input mode currently updates only the config. The previous sy
 
 When the saved input mode changes:
 
-1. Stop or reset any active task through the pipeline bridge.
-2. Persist the new configuration.
+1. Persist the new configuration so the main process recognizes the selected mode.
+2. Stop or reset any active task through the pipeline bridge.
 3. Rebuild renderer task state from the reset status.
 4. Clear the subtitle window.
 
