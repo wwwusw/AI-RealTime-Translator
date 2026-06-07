@@ -6,8 +6,8 @@ describe('App source', () => {
   it('stores disclosure copy for the real subtitle event stream in source', () => {
     const source = readFileSync(resolve('src/renderer/src/App.tsx'), 'utf8')
 
-    expect(source).toContain('AI RealTime Translator')
-    expect(source).toContain('live system audio')
+    expect(source).toContain('AI 实时翻译')
+    expect(source).toContain('本地文件与系统声音的实时字幕翻译')
     expect(source).toContain('SubtitleTimeline')
   })
 })

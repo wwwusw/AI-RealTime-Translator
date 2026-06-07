@@ -63,7 +63,7 @@ const buildTaskStatus = ({
 })
 
 const createIdleTaskStatus = (
-  summary = 'No task has run yet.',
+  summary = '尚未运行任务。',
   inputMode: PipelineInputMode = 'file'
 ): PipelineTaskStatus =>
   buildTaskStatus({
@@ -110,25 +110,25 @@ const createRevisionSummary = (event: PipelineEvent): string | null => {
         )
 
       if (!latestBlock) {
-        return 'Listening for the next live translation block.'
+        return '正在等待下一段实时翻译。'
       }
 
-      return `Live subtitle: ${
+      return `实时字幕：${
         latestBlock.refinedTranslation ||
         latestBlock.liveTranslation ||
         latestBlock.sourceTranscript
       }`
     }
     case 'subtitle-revised':
-      return `Latest revision: ${event.subtitle.chinese}`
+      return `最新精翻：${event.subtitle.chinese}`
     case 'subtitle-pending':
-      return 'Listening for the next subtitle chunk.'
+      return '正在等待下一段字幕。'
     case 'subtitle-added':
-      return `Draft subtitle: ${event.subtitle.english}`
+      return `字幕草稿：${event.subtitle.english}`
     case 'pipeline-completed':
       return event.subtitles.length > 0
         ? null
-        : 'Pipeline completed without emitting subtitles.'
+        : '处理已完成，但没有生成字幕。'
     default:
       return null
   }
@@ -165,7 +165,7 @@ const startPipelineRun = (filePath: string, config: AppConfig): PipelineTaskStat
       inputMode: 'file',
       sourceLabel: filePath,
       stage: 'running',
-      lastRevisionSummary: 'Task started. Waiting for pipeline events.'
+      lastRevisionSummary: '任务已启动，正在等待字幕。'
     })
   )
 
@@ -232,14 +232,14 @@ const startPipelineRun = (filePath: string, config: AppConfig): PipelineTaskStat
         return
       }
 
-      const message = error instanceof Error ? error.message : 'unknown pipeline error'
+      const message = error instanceof Error ? error.message : '未知处理错误'
       setTaskStatus(
         buildTaskStatus({
           filePath,
           inputMode: 'file',
           sourceLabel: filePath,
           stage: 'ready',
-          lastRevisionSummary: `Task failed: ${message}`
+          lastRevisionSummary: `任务失败：${message}`
         })
       )
     })
@@ -263,7 +263,7 @@ const startSystemAudioRun = async (config: AppConfig): Promise<PipelineTaskStatu
   const controller = new AbortController()
   const refinementProvider = createOpenAiChatRefinementProvider(config.refiner)
   const liveTranslateProvider = createQwenLiveTranslateRealtimeProvider(config.liveTranslate)
-  const sourceLabel = 'System audio capture'
+  const sourceLabel = '系统声音采集'
 
   setTaskStatus(
     buildTaskStatus({
@@ -271,7 +271,7 @@ const startSystemAudioRun = async (config: AppConfig): Promise<PipelineTaskStatu
       inputMode: 'system-audio',
       sourceLabel,
       stage: 'running',
-      lastRevisionSummary: 'System audio capture is live. Waiting for the first chunk.'
+      lastRevisionSummary: '系统声音采集已开始，正在等待第一段音频。'
     })
   )
 
@@ -311,14 +311,14 @@ const startSystemAudioRun = async (config: AppConfig): Promise<PipelineTaskStatu
 
     return currentTaskStatus
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'unknown pipeline error'
+    const message = error instanceof Error ? error.message : '未知处理错误'
     return setTaskStatus(
       buildTaskStatus({
         filePath: null,
         inputMode: 'system-audio',
         sourceLabel,
         stage: 'paused',
-        lastRevisionSummary: `Task failed: ${message}`
+        lastRevisionSummary: `任务失败：${message}`
       })
     )
   }
@@ -331,7 +331,7 @@ const failRunningTask = async (message: string) => {
       inputMode: currentTaskStatus.inputMode,
       sourceLabel: currentTaskStatus.sourceLabel,
       stage: currentTaskStatus.inputMode === 'system-audio' ? 'paused' : 'ready',
-      lastRevisionSummary: `Task failed: ${message}`
+      lastRevisionSummary: `任务失败：${message}`
     })
   )
 
@@ -357,7 +357,7 @@ export const registerTaskHandlers = () => {
           inputMode: 'file',
           sourceLabel: file.filePath,
           stage: 'ready',
-          lastRevisionSummary: 'File selected. Ready to start the task.'
+          lastRevisionSummary: '文件已选择，可以开始处理。'
         })
       )
     }
@@ -412,7 +412,7 @@ export const registerTaskHandlers = () => {
       try {
         await runningTask.session.appendChunk(chunkPayload)
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'unknown pipeline error'
+        const message = error instanceof Error ? error.message : '未知处理错误'
         await failRunningTask(message)
         throw error
       }
@@ -440,7 +440,7 @@ export const registerTaskHandlers = () => {
         })
       )
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'unknown pipeline error'
+      const message = error instanceof Error ? error.message : '未知处理错误'
       await liveTask.session.abort()
       return setTaskStatus(
         buildTaskStatus({
@@ -448,7 +448,7 @@ export const registerTaskHandlers = () => {
           inputMode: 'system-audio',
           sourceLabel: currentTaskStatus.sourceLabel,
           stage: 'paused',
-          lastRevisionSummary: `Task failed: ${message}`
+          lastRevisionSummary: `任务失败：${message}`
         })
       )
     }
@@ -473,7 +473,7 @@ export const registerTaskHandlers = () => {
         inputMode: currentTaskStatus.inputMode,
         sourceLabel: currentTaskStatus.sourceLabel,
         stage: 'paused',
-        lastRevisionSummary: 'Task paused. The current pipeline run was aborted.'
+        lastRevisionSummary: '任务已暂停，当前处理流程已终止。'
       })
     )
   })
@@ -489,6 +489,6 @@ export const registerTaskHandlers = () => {
       }
     }
 
-    return setTaskStatus(createIdleTaskStatus('Task reset. No file is selected.', loadConfig().inputMode))
+    return setTaskStatus(createIdleTaskStatus('任务已重置，请选择文件。', loadConfig().inputMode))
   })
 }

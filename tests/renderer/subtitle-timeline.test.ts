@@ -50,7 +50,7 @@ describe('SubtitleTimeline', () => {
     )
 
     expect(html).toContain('欢迎回来。模型正在润色这句话。字幕仍在实时增长。')
-    expect(html).toContain('aria-label="Live translated captions"')
+    expect(html).toContain('aria-label="实时翻译字幕"')
     expect(html).toContain('aria-live="polite"')
     expect(html).toContain('aria-atomic="true"')
     expect(html).toContain('class="live-caption-text"')

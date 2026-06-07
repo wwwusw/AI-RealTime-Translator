@@ -271,16 +271,16 @@ describe('useAppStore task controls', () => {
     await useAppStore.getState().start()
     expect(useAppStore.getState().isRunning).toBe(true)
     expect(useAppStore.getState().canStart).toBe(false)
-    expect(useAppStore.getState().stageLabel).toBe('Running')
+    expect(useAppStore.getState().stageLabel).toBe('运行中')
 
     await useAppStore.getState().pause()
     expect(useAppStore.getState().isRunning).toBe(false)
     expect(useAppStore.getState().canStart).toBe(true)
-    expect(useAppStore.getState().stageLabel).toBe('Paused')
+    expect(useAppStore.getState().stageLabel).toBe('已暂停')
 
     await useAppStore.getState().reset()
     expect(useAppStore.getState().filePath).toBe(null)
-    expect(useAppStore.getState().stageLabel).toBe('Idle')
+    expect(useAppStore.getState().stageLabel).toBe('空闲')
     expect(useAppStore.getState().canStart).toBe(false)
   })
 
@@ -442,6 +442,70 @@ describe('useAppStore task controls', () => {
     expect(useAppStore.getState().config.asr.provider).toBe('dashscope-realtime')
   })
 
+  it('resets stale system-audio state when switching back to file mode', async () => {
+    const nextConfig = {
+      ...defaultAppConfig,
+      inputMode: 'file' as const
+    }
+    const save = vi.fn().mockResolvedValue(nextConfig)
+    const resetTask = vi.fn().mockResolvedValue(
+      createStatus({
+        inputMode: 'file',
+        lastRevisionSummary: '任务已重置，请选择文件。'
+      })
+    )
+
+    window.appConfig = {
+      load: vi.fn().mockResolvedValue({
+        ...defaultAppConfig,
+        inputMode: 'system-audio' as const
+      }),
+      save
+    }
+    window.pipelineTasks = {
+      pickMediaFile: vi.fn().mockResolvedValue(null),
+      getTaskStatus: vi.fn().mockResolvedValue(
+        createStatus({
+          inputMode: 'system-audio',
+          sourceLabel: '系统声音采集',
+          stage: 'paused',
+          canStart: true
+        })
+      ),
+      startTask: vi.fn().mockResolvedValue(createStatus()),
+      pauseTask: vi.fn().mockResolvedValue(createStatus()),
+      resetTask
+    }
+
+    const { useAppStore } = await import('../../src/renderer/src/state/useAppStore')
+    await useAppStore.getState().hydrateConfig()
+    useAppStore.setState({
+      subtitleBlocks: [
+        {
+          id: 'stale-block',
+          index: 0,
+          startMs: 0,
+          endMs: 2000,
+          sourceTranscript: 'stale',
+          liveTranslation: '旧字幕',
+          refinedTranslation: '',
+          status: 'live',
+          updatedAt: 0
+        }
+      ]
+    })
+
+    await useAppStore.getState().saveConfig(nextConfig)
+
+    expect(save).toHaveBeenCalledWith(nextConfig)
+    expect(resetTask).toHaveBeenCalledOnce()
+    expect(useAppStore.getState().config.inputMode).toBe('file')
+    expect(useAppStore.getState().filePath).toBe(null)
+    expect(useAppStore.getState().sourceLabel).toBe(null)
+    expect(useAppStore.getState().canStart).toBe(false)
+    expect(useAppStore.getState().subtitleBlocks).toEqual([])
+  })
+
   it('surfaces a bridge error instead of silently doing nothing when file picking fails', async () => {
     window.appConfig = {
       load: vi.fn().mockResolvedValue(defaultAppConfig),
@@ -458,7 +522,7 @@ describe('useAppStore task controls', () => {
     const { useAppStore } = await import('../../src/renderer/src/state/useAppStore')
 
     await useAppStore.getState().pick()
-    expect(useAppStore.getState().lastRevisionSummary).toBe('File selection failed: dialog failed')
+    expect(useAppStore.getState().lastRevisionSummary).toBe('选择文件失败：dialog failed')
   })
 
   it('marks the desktop bridge as unavailable instead of silently no-oping outside Electron', async () => {
@@ -469,7 +533,7 @@ describe('useAppStore task controls', () => {
 
     await useAppStore.getState().pick()
     expect(useAppStore.getState().lastRevisionSummary).toBe(
-      'Desktop bridge unavailable. Start the app through Electron.'
+      '桌面桥接不可用，请通过 Electron 启动应用。'
     )
   })
 })

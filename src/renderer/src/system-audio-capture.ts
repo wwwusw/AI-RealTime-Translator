@@ -94,7 +94,7 @@ export const startSystemAudioCapture = async ({
   onError
 }: StartSystemAudioCaptureOptions): Promise<SystemAudioCaptureHandle> => {
   if (!navigator.mediaDevices?.getDisplayMedia) {
-    throw new Error('System audio capture is unavailable in this renderer.')
+    throw new Error('当前环境不支持系统声音采集。')
   }
 
   const displayStream = await navigator.mediaDevices.getDisplayMedia({
@@ -105,7 +105,7 @@ export const startSystemAudioCapture = async ({
 
   if (audioTracks.length === 0) {
     displayStream.getTracks().forEach((track) => track.stop())
-    throw new Error('No system audio track was returned. Check Windows audio-sharing permissions.')
+    throw new Error('没有获取到系统音频轨道，请检查 Windows 的音频共享权限。')
   }
 
   const audioStream = new MediaStream(audioTracks)
@@ -223,7 +223,7 @@ export const startSystemAudioCapture = async ({
         }
 
         await stop('pause')
-        await onError(error instanceof Error ? error : new Error('unknown system audio capture error'))
+        await onError(error instanceof Error ? error : new Error('未知的系统声音采集错误'))
       })
   }
 

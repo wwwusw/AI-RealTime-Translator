@@ -244,7 +244,7 @@ describe('registerTaskHandlers', () => {
         stage: 'completed',
         isRunning: false,
         canStart: true,
-        lastRevisionSummary: 'Latest revision: revised translation'
+        lastRevisionSummary: '最新精翻：revised translation'
       })
     })
 
@@ -375,7 +375,7 @@ describe('registerTaskHandlers', () => {
     const startStatus = await startSystemAudioTask?.()
     expect(startStatus).toMatchObject({
       inputMode: 'system-audio',
-      sourceLabel: 'System audio capture',
+      sourceLabel: '系统声音采集',
       stage: 'running',
       isRunning: true
     })
@@ -440,7 +440,7 @@ describe('registerTaskHandlers', () => {
       sourceLabel: 'fixtures/input.wav',
       stage: 'ready',
       canStart: true,
-      lastRevisionSummary: 'File selected. Ready to start the task.'
+      lastRevisionSummary: '文件已选择，可以开始处理。'
     })
   })
 
@@ -483,7 +483,7 @@ describe('registerTaskHandlers', () => {
     })
     await expect(getTaskStatus?.()).resolves.toMatchObject({
       stage: 'paused',
-      lastRevisionSummary: 'Task paused. The current pipeline run was aborted.'
+      lastRevisionSummary: '任务已暂停，当前处理流程已终止。'
     })
 
     const pausedAgainStatus = await pauseTask?.()
@@ -502,7 +502,7 @@ describe('registerTaskHandlers', () => {
     })
     await expect(getTaskStatus?.()).resolves.toMatchObject({
       stage: 'idle',
-      lastRevisionSummary: 'Task reset. No file is selected.'
+      lastRevisionSummary: '任务已重置，请选择文件。'
     })
   })
 })
