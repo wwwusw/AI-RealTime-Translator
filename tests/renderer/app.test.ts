@@ -1,5 +1,7 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import App from '../../src/renderer/src/App'
 
@@ -10,8 +12,7 @@ describe('App', () => {
     expect(html).toContain('AI RealTime Translator')
     expect(html).toContain('live system audio')
     expect(html).toContain('No media file selected yet.')
-    expect(html).toContain('empty state')
-    expect(html).toContain('Single-box rolling captions')
+    expect(html).toContain('Live translated captions')
   })
 
   it('shows an editable settings panel with live translate and refiner fields', () => {
@@ -34,5 +35,15 @@ describe('App', () => {
     expect(html).toContain('Refiner Model')
     expect(html).toContain('deepseek-v4-flash')
     expect(html).toContain('Save Settings')
+  })
+
+  it('uses a fixed caption surface without a scrolling block feed', () => {
+    const styles = readFileSync(resolve('src/renderer/src/styles.css'), 'utf8')
+
+    expect(styles).toContain('.live-caption-surface')
+    expect(styles).toContain('height: 132px')
+    expect(styles).toContain('overflow: hidden')
+    expect(styles).not.toContain('.subtitle-window-feed')
+    expect(styles).not.toContain('.subtitle-window-block')
   })
 })

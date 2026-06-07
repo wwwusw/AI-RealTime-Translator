@@ -13,6 +13,7 @@ import {
   type SystemAudioCaptureHandle,
   type SystemAudioStopMode
 } from '../system-audio-capture'
+import { mergeCaptionBlocks } from '../features/subtitles/compose-caption-text'
 
 export type TimelineSubtitleBlock = SubtitleBlock
 
@@ -121,7 +122,7 @@ const applyPipelineEventToBlocks = (
 ): TimelineSubtitleBlock[] => {
   switch (event.type) {
     case 'subtitle-blocks-updated':
-      return trimBlockWindow(event.blocks)
+      return mergeCaptionBlocks(blocks, event.blocks)
     case 'subtitle-pending':
     case 'subtitle-added':
       return upsertBlock(blocks, {

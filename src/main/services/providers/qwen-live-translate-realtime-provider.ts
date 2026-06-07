@@ -72,6 +72,8 @@ export const createQwenLiveTranslateRealtimeProvider = ({
       let settled = false
       let finished = false
       let sessionFinished = false
+      let abortRequested = false
+      let socketOpen = false
       let fatalError: Error | null = null
       const latestFullTextByKey = new Map<string, string>()
 
@@ -96,6 +98,7 @@ export const createQwenLiveTranslateRealtimeProvider = ({
       }
 
       const handleAbort = () => {
+        abortRequested = true
         socket.close()
         rejectWith(createAbortError())
       }
@@ -153,6 +156,7 @@ export const createQwenLiveTranslateRealtimeProvider = ({
       signal?.addEventListener?.('abort', handleAbort, { once: true })
 
       socket.on('open', () => {
+        socketOpen = true
         socket.send(
           JSON.stringify({
             type: 'session.update',
@@ -187,6 +191,9 @@ export const createQwenLiveTranslateRealtimeProvider = ({
                 }
 
                 await ensureReady()
+                if (!socketOpen) {
+                  throw fatalError ?? new Error('Live translation provider connection closed unexpectedly')
+                }
                 socket.send(
                   JSON.stringify({
                     type: 'input_audio_buffer.append',
@@ -205,6 +212,9 @@ export const createQwenLiveTranslateRealtimeProvider = ({
 
                 await ensureReady()
                 finished = true
+                if (!socketOpen && !sessionFinished) {
+                  throw fatalError ?? new Error('Live translation provider connection closed before session finished')
+                }
                 socket.send(JSON.stringify({ type: 'session.finish' }))
 
                 await new Promise<void>((innerResolve, innerReject) => {
@@ -223,6 +233,7 @@ export const createQwenLiveTranslateRealtimeProvider = ({
                 })
               },
               abort: async () => {
+                abortRequested = true
                 socket.close()
               }
             })
@@ -324,11 +335,23 @@ export const createQwenLiveTranslateRealtimeProvider = ({
       })
 
       socket.on('close', () => {
+        socketOpen = false
+
         if (settled) {
           return
         }
 
+        if (abortRequested) {
+          sessionFinished = true
+          return
+        }
+
+        if (ready && sessionFinished) {
+          return
+        }
+
         if (ready) {
+          fatalError = new Error('Live translation provider connection closed unexpectedly')
           sessionFinished = true
           return
         }

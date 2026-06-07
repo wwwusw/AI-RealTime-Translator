@@ -145,4 +145,82 @@ describe('createSystemAudioPipelineSession', () => {
       })
     ])
   })
+
+  it('keeps accepting later audio chunks while refinement is still in flight', async () => {
+    let onLiveTranslateEvent: ((event: LiveTranslateStreamEvent) => void) | undefined
+    let releaseRefinement: (() => void) | null = null
+
+    const liveTranslateSession: LiveTranslateSession = {
+      appendAudioChunk: vi.fn().mockResolvedValue(undefined),
+      finish: vi.fn().mockResolvedValue(undefined),
+      abort: vi.fn().mockResolvedValue(undefined)
+    }
+
+    const refinementProvider = {
+      refineBlocks: vi.fn().mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            releaseRefinement = () => {
+              resolve([
+                { id: 'block-0', translatedText: '精翻 0' },
+                { id: 'block-1', translatedText: '精翻 1' }
+              ])
+            }
+          })
+      )
+    }
+
+    const session = await createSystemAudioPipelineSession({
+      liveTranslateProvider: {
+        startSession: vi.fn().mockImplementation(async ({ onEvent }) => {
+          onLiveTranslateEvent = onEvent
+          return liveTranslateSession
+        })
+      },
+      refinementProvider,
+      blockDurationMs: 2000,
+      emitEvent: vi.fn()
+    })
+
+    await session.appendChunk({
+      bytes: new Uint8Array([1]),
+      durationMs: 2000,
+      mimeType: 'audio/pcm'
+    })
+    emitItem(onLiveTranslateEvent, 'item-0', 'source 0', 'live 0')
+
+    await session.appendChunk({
+      bytes: new Uint8Array([2]),
+      durationMs: 2000,
+      mimeType: 'audio/pcm'
+    })
+    emitItem(onLiveTranslateEvent, 'item-1', 'source 1', 'live 1')
+
+    await session.appendChunk({
+      bytes: new Uint8Array([3]),
+      durationMs: 2000,
+      mimeType: 'audio/pcm'
+    })
+    emitItem(onLiveTranslateEvent, 'item-2', 'source 2', 'live 2')
+
+    const fourthChunkPromise = session.appendChunk({
+      bytes: new Uint8Array([4]),
+      durationMs: 2000,
+      mimeType: 'audio/pcm'
+    })
+
+    await fourthChunkPromise
+    emitItem(onLiveTranslateEvent, 'item-3', 'source 3', 'live 3')
+
+    await session.appendChunk({
+      bytes: new Uint8Array([5]),
+      durationMs: 2000,
+      mimeType: 'audio/pcm'
+    })
+
+    expect(liveTranslateSession.appendAudioChunk).toHaveBeenCalledTimes(5)
+    expect(refinementProvider.refineBlocks).toHaveBeenCalledTimes(1)
+
+    releaseRefinement?.()
+  })
 })

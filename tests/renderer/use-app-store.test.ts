@@ -153,6 +153,67 @@ describe('useAppStore task controls', () => {
     ])
   })
 
+  it('retains older short blocks until the caption reaches its character limit', async () => {
+    const eventListeners: Array<(event: PipelineEvent) => void> = []
+
+    window.appConfig = {
+      load: vi.fn().mockResolvedValue(defaultAppConfig),
+      save: vi.fn().mockResolvedValue(defaultAppConfig)
+    }
+    window.pipelineTasks = {
+      pickMediaFile: vi.fn().mockResolvedValue(null),
+      getTaskStatus: vi.fn().mockResolvedValue(
+        createStatus({
+          inputMode: 'system-audio',
+          sourceLabel: 'System audio capture',
+          stage: 'running',
+          isRunning: true
+        })
+      ),
+      startTask: vi.fn().mockResolvedValue(createStatus()),
+      pauseTask: vi.fn().mockResolvedValue(createStatus()),
+      resetTask: vi.fn().mockResolvedValue(createStatus()),
+      onPipelineEvent: vi.fn((listener: (event: PipelineEvent) => void) => {
+        eventListeners.push(listener)
+        return () => {}
+      })
+    }
+
+    const createLiveBlock = (index: number) => ({
+      id: `block-${index}`,
+      index,
+      startMs: index * 2000,
+      endMs: (index + 1) * 2000,
+      sourceTranscript: `source ${index}`,
+      liveTranslation: String(index).repeat(5),
+      refinedTranslation: '',
+      status: 'live' as const,
+      updatedAt: index
+    })
+
+    const { useAppStore } = await import('../../src/renderer/src/state/useAppStore')
+    await useAppStore.getState().hydrateConfig()
+
+    eventListeners[0]?.({
+      type: 'subtitle-blocks-updated',
+      blocks: Array.from({ length: 6 }, (_, index) => createLiveBlock(index))
+    })
+    eventListeners[0]?.({
+      type: 'subtitle-blocks-updated',
+      blocks: Array.from({ length: 6 }, (_, index) => createLiveBlock(index + 1))
+    })
+
+    expect(useAppStore.getState().subtitleBlocks.map((block) => block.id)).toEqual([
+      'block-0',
+      'block-1',
+      'block-2',
+      'block-3',
+      'block-4',
+      'block-5',
+      'block-6'
+    ])
+  })
+
   it('tracks pick, start, pause, and reset through the task bridge', async () => {
     const pickMediaFile = vi.fn().mockResolvedValue({ filePath: 'fixtures/chunk-0.wav' })
     const getTaskStatus = vi
