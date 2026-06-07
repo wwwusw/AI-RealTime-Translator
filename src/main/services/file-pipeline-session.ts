@@ -17,6 +17,7 @@ type FilePipelineSessionOptions = {
   blockDurationMs: number
   sourceLanguage?: string
   targetLanguage: string
+  speedMultiplier?: number
   signal?: AbortSignal
 }
 
@@ -90,6 +91,7 @@ export const createFilePipelineSession = async ({
   blockDurationMs,
   sourceLanguage,
   targetLanguage,
+  speedMultiplier = 2,
   signal
 }: FilePipelineSessionOptions): Promise<FilePipelineSessionHandle> => {
   const session = await createSystemAudioPipelineSession({
@@ -118,12 +120,25 @@ export const createFilePipelineSession = async ({
     const pcmChunks = buildPcmChunks(pcmData)
     console.log(`[file-pipeline] Sending ${pcmChunks.length} PCM chunks to Live Translate provider`)
 
+    const delayMs = Math.max(1, Math.round(pcmChunks[0]?.durationMs ?? 250) / speedMultiplier)
+    console.log(`[file-pipeline] Streaming at ${speedMultiplier}x real-time, ${delayMs}ms per chunk`)
+
     for (let i = 0; i < pcmChunks.length; i += 1) {
       signal?.throwIfAborted?.()
       await session.appendChunk(pcmChunks[i]!)
 
       if ((i + 1) % 20 === 0 || i === pcmChunks.length - 1) {
         console.log(`[file-pipeline] Sent ${i + 1}/${pcmChunks.length} PCM chunks`)
+      }
+
+      if (i < pcmChunks.length - 1) {
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, delayMs)
+          signal?.addEventListener?.('abort', () => {
+            clearTimeout(timer)
+            resolve()
+          }, { once: true })
+        })
       }
     }
 

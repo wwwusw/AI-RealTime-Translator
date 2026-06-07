@@ -193,6 +193,11 @@ const startPipelineRun = (filePath: string, config: AppConfig): PipelineTaskStat
         return
       }
 
+      broadcastPipelineEvent({
+        type: 'pipeline-completed',
+        subtitles: []
+      })
+
       setTaskStatus(
         buildTaskStatus({
           filePath,
