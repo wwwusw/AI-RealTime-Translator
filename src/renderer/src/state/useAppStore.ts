@@ -52,7 +52,7 @@ type AppStore = {
 let unsubscribeFromPipelineEvents: (() => void) | null = null
 let activeSystemAudioCapture: SystemAudioCaptureHandle | null = null
 let pendingCaptureSummary: string | null = null
-const bridgeUnavailableSummary = 'Desktop bridge unavailable. Start the app through Electron.'
+const bridgeUnavailableSummary = '桌面桥接不可用，请通过 Electron 启动应用。'
 
 const getAppConfigBridge = (): AppConfigBridge | undefined => {
   if (typeof window === 'undefined') {
@@ -73,21 +73,21 @@ const getPipelineTasksBridge = (): PipelineTasksBridge | undefined => {
 const getStageLabel = (stage: PipelineTaskStage): string => {
   switch (stage) {
     case 'ready':
-      return 'Ready'
+      return '就绪'
     case 'running':
-      return 'Running'
+      return '运行中'
     case 'paused':
-      return 'Paused'
+      return '已暂停'
     case 'completed':
-      return 'Completed'
+      return '已完成'
     case 'idle':
     default:
-      return 'Idle'
+      return '空闲'
   }
 }
 
 const summarizeError = (error: unknown): string =>
-  error instanceof Error ? error.message : 'unknown error'
+  error instanceof Error ? error.message : '未知错误'
 
 const createTaskState = (status?: PipelineTaskStatus): AppStoreTaskState => ({
   filePath: status?.filePath ?? null,
@@ -96,9 +96,27 @@ const createTaskState = (status?: PipelineTaskStatus): AppStoreTaskState => ({
   stageLabel: getStageLabel(status?.stage ?? 'idle'),
   isRunning: status?.isRunning ?? false,
   canStart: status?.canStart ?? false,
-  lastRevisionSummary: status?.lastRevisionSummary ?? 'No task has run yet.',
+  lastRevisionSummary: status?.lastRevisionSummary ?? '尚未运行任务。',
   timelineMode: status?.sourceLabel || status?.filePath ? 'live' : 'empty'
 })
+
+const createModeResetState = (
+  inputMode: AppConfig['inputMode'],
+  status?: PipelineTaskStatus
+): AppStoreTaskState => {
+  if (status?.inputMode === inputMode) {
+    return createTaskState(status)
+  }
+
+  return {
+    ...createTaskState(),
+    canStart: inputMode === 'system-audio',
+    lastRevisionSummary:
+      inputMode === 'system-audio'
+        ? '系统声音模式已就绪。'
+        : '文件模式已就绪，请选择媒体文件。'
+  }
+}
 
 const trimBlockWindow = (blocks: TimelineSubtitleBlock[]): TimelineSubtitleBlock[] =>
   blocks.slice(-6)
@@ -220,13 +238,39 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
   saveConfig: async (config) => {
     const bridge = getAppConfigBridge()
+    const modeChanged = config.inputMode !== get().config.inputMode
+
     if (!bridge) {
-      set({ config })
+      set({
+        config,
+        ...(modeChanged ? createModeResetState(config.inputMode) : {}),
+        ...(modeChanged ? { subtitleBlocks: [] } : {})
+      })
       return
     }
 
     const next = await bridge.save(config)
+
+    if (!modeChanged) {
+      set({ config: next })
+      return
+    }
+
     set({ config: next })
+
+    if (activeSystemAudioCapture) {
+      await stopSystemAudioCapture('reset')
+      set({ config: next, subtitleBlocks: [] })
+      return
+    }
+
+    const taskBridge = getPipelineTasksBridge()
+    const status = taskBridge ? await taskBridge.resetTask() : undefined
+    set({
+      config: next,
+      ...createModeResetState(next.inputMode, status),
+      subtitleBlocks: []
+    })
   },
   pick: async () => {
     const bridge = getPipelineTasksBridge()
@@ -239,7 +283,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const file = await bridge.pickMediaFile()
 
       if (!file) {
-        set({ lastRevisionSummary: 'File selection was cancelled.' })
+        set({ lastRevisionSummary: '已取消选择文件。' })
         return
       }
 
@@ -250,7 +294,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       })
     } catch (error) {
       set({
-        lastRevisionSummary: `File selection failed: ${summarizeError(error)}`
+        lastRevisionSummary: `选择文件失败：${summarizeError(error)}`
       })
     }
   },
@@ -297,7 +341,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
               pendingCaptureSummary = null
             },
             onError: async (error) => {
-              pendingCaptureSummary = `System audio capture failed: ${summarizeError(error)}`
+              pendingCaptureSummary = `系统声音采集失败：${summarizeError(error)}`
             }
           })
         } catch (error) {
@@ -305,7 +349,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
           set({
             ...createTaskState(resetStatus),
             subtitleBlocks: [],
-            lastRevisionSummary: `System audio capture failed: ${summarizeError(error)}`
+            lastRevisionSummary: `系统声音采集失败：${summarizeError(error)}`
           })
         }
 
@@ -319,7 +363,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       })
     } catch (error) {
       set({
-        lastRevisionSummary: `Task start failed: ${summarizeError(error)}`
+        lastRevisionSummary: `启动任务失败：${summarizeError(error)}`
       })
     }
   },
@@ -338,7 +382,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       }))
     } catch (error) {
       set({
-        lastRevisionSummary: `Task pause failed: ${summarizeError(error)}`
+        lastRevisionSummary: `暂停任务失败：${summarizeError(error)}`
       })
     }
   },
@@ -348,7 +392,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         await stopSystemAudioCapture('reset')
       } catch (error) {
         set({
-          lastRevisionSummary: `Task reset failed: ${summarizeError(error)}`
+          lastRevisionSummary: `重置任务失败：${summarizeError(error)}`
         })
       }
       return
@@ -372,7 +416,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       })
     } catch (error) {
       set({
-        lastRevisionSummary: `Task reset failed: ${summarizeError(error)}`
+        lastRevisionSummary: `重置任务失败：${summarizeError(error)}`
       })
     }
   }

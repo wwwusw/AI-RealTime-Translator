@@ -30,11 +30,10 @@ export default function App() {
   return (
     <main className="app-shell">
       <section className="hero-card">
-        <p className="eyebrow">AI RealTime Translator</p>
-        <h1>Desktop subtitles for files and live system audio</h1>
+        <p className="eyebrow">AI 实时翻译</p>
+        <h1>本地文件与系统声音的实时字幕翻译</h1>
         <p>
-          The renderer now keeps the subtitle timeline live for both imported media files and
-          Windows system audio capture while the main process continues to stream revision events.
+          导入本地音视频，或直接采集 Windows 系统声音，实时生成并持续纠正中文字幕。
         </p>
       </section>
       <Workspace

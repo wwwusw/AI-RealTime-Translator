@@ -20,34 +20,34 @@ export function Workspace({
   onReset
 }: WorkspaceProps) {
   return (
-    <section className="workspace-card" aria-label="Task workspace">
-      <p className="eyebrow">Workspace</p>
-      <h2>Task Controls</h2>
+    <section className="workspace-card" aria-label="任务控制">
+      <p className="eyebrow">工作区</p>
+      <h2>任务控制</h2>
       <p className="workspace-path">
         {sourceLabel ??
           (inputMode === 'system-audio'
-            ? 'System audio mode is armed. Press start to begin loopback capture.'
-            : 'No media file selected yet.')}
+            ? '系统声音模式已就绪，点击开始后选择要采集的系统音频。'
+            : '尚未选择媒体文件。')}
       </p>
       <p className="workspace-hint">
         {inputMode === 'system-audio'
-          ? 'Start System Audio will request display capture so Electron can read the current system mix.'
-          : 'Select a local media file to keep the original file-to-subtitle workflow.'}
+          ? '开始采集后，系统会请求共享屏幕声音，用于实时识别和翻译。'
+          : '请选择本地音频或视频文件，开始生成翻译字幕。'}
       </p>
       <div className="task-buttons">
         {inputMode === 'file' ? (
           <button type="button" onClick={onPick}>
-            Select File
+            选择文件
           </button>
         ) : null}
         <button type="button" onClick={onStart} disabled={!canStart}>
-          {inputMode === 'system-audio' ? 'Start System Audio' : 'Start Processing'}
+          {inputMode === 'system-audio' ? '开始采集系统声音' : '开始处理'}
         </button>
         <button type="button" onClick={onPause} disabled={!isRunning}>
-          Pause Processing
+          暂停
         </button>
         <button type="button" onClick={onReset}>
-          Reset Task
+          重置任务
         </button>
       </div>
     </section>
