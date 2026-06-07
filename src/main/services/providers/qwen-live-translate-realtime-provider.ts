@@ -156,6 +156,7 @@ export const createQwenLiveTranslateRealtimeProvider = ({
       signal?.addEventListener?.('abort', handleAbort, { once: true })
 
       socket.on('open', () => {
+        console.log('[qwen-live-translate] websocket opened')
         socketOpen = true
         socket.send(
           JSON.stringify({
@@ -180,8 +181,10 @@ export const createQwenLiveTranslateRealtimeProvider = ({
         try {
           const message = parseRealtimeMessage(payload)
           const messageType = getString(message.type)
+          console.log(`[qwen-live-translate] received: ${messageType}`)
 
           if (messageType === 'session.updated') {
+            console.log('[qwen-live-translate] session ready')
             ready = true
 
             resolve({
@@ -282,6 +285,7 @@ export const createQwenLiveTranslateRealtimeProvider = ({
           }
 
           if (messageType === 'session.finished') {
+            console.log('[qwen-live-translate] session finished')
             sessionFinished = true
             socket.close()
             return
@@ -297,6 +301,7 @@ export const createQwenLiveTranslateRealtimeProvider = ({
                 ? errorPayload.message
                 : 'unknown realtime error'
 
+            console.error(`[qwen-live-translate] error: ${errorMessage}`)
             const error = new Error(`Live translation provider request failed: ${errorMessage}`)
 
             if (ready) {
