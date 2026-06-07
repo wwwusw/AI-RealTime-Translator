@@ -41,7 +41,7 @@ const demoBlocks: TimelineSubtitleBlock[] = [
 ]
 
 describe('SubtitleTimeline', () => {
-  it('renders translated blocks as one continuous caption string', () => {
+  it('renders each translated block as a separate line in a scrollable surface', () => {
     const html = renderToStaticMarkup(
       createElement(SubtitleTimeline, {
         subtitleBlocks: demoBlocks,
@@ -49,20 +49,54 @@ describe('SubtitleTimeline', () => {
       })
     )
 
-    expect(html).toContain('欢迎回来。模型正在润色这句话。字幕仍在实时增长。')
+    // Each block renders as its own <p> line
+    expect(html).toContain('欢迎回来。')
+    expect(html).toContain('模型正在润色这句话。')
+    expect(html).toContain('字幕仍在实时增长。')
     expect(html).toContain('aria-label="实时翻译字幕"')
-    expect(html).toContain('aria-live="polite"')
-    expect(html).toContain('aria-atomic="true"')
-    expect(html).toContain('class="live-caption-text"')
+    expect(html).toContain('live-caption-line')
+    // Scrollable surface class
+    expect(html).toContain('live-caption-surface--scrollable')
+    // No ordered-list markup
     expect(html).not.toContain('<ol')
     expect(html).not.toContain('<li')
-    expect(html).not.toContain('Refined')
-    expect(html).not.toContain('Pending')
+    // English source is never shown
     expect(html).not.toContain('Welcome back.')
-    expect(html).not.toContain('00:00')
   })
 
-  it('renders an empty caption surface without waiting text', () => {
+  it('renders an empty placeholder when no blocks have translatable content', () => {
+    const html = renderToStaticMarkup(
+      createElement(SubtitleTimeline, {
+        subtitleBlocks: [],
+        timelineMode: 'live'
+      })
+    )
+
+    expect(html).toContain('等待翻译内容')
+    expect(html).toContain('live-caption-surface--empty')
+    // With zero blocks we show the placeholder, not the scrollable surface
+    expect(html).not.toContain('live-caption-surface--scrollable')
+  })
+
+  it('prefers refinedTranslation over liveTranslation for each line', () => {
+    const html = renderToStaticMarkup(
+      createElement(SubtitleTimeline, {
+        subtitleBlocks: [
+          {
+            ...demoBlocks[0],
+            liveTranslation: '实时草稿',
+            refinedTranslation: '静默精翻'
+          }
+        ],
+        timelineMode: 'live'
+      })
+    )
+
+    expect(html).toContain('静默精翻')
+    expect(html).not.toContain('实时草稿')
+  })
+
+  it('renders the empty placeholder when all blocks have empty translations', () => {
     const html = renderToStaticMarkup(
       createElement(SubtitleTimeline, {
         subtitleBlocks: [
@@ -82,26 +116,8 @@ describe('SubtitleTimeline', () => {
       })
     )
 
-    expect(html).toContain('class="live-caption-text"')
-    expect(html).not.toContain('Waiting')
-    expect(html).not.toContain('Listening')
-  })
-
-  it('silently displays refined text in place of live text', () => {
-    const html = renderToStaticMarkup(
-      createElement(SubtitleTimeline, {
-        subtitleBlocks: [
-          {
-            ...demoBlocks[0],
-            liveTranslation: '实时草稿',
-            refinedTranslation: '静默精翻'
-          }
-        ],
-        timelineMode: 'live'
-      })
-    )
-
-    expect(html).toContain('静默精翻')
-    expect(html).not.toContain('实时草稿')
+    // composeCaptionLines filters out empty blocks → 0 lines → empty state
+    expect(html).toContain('等待翻译内容')
+    expect(html).toContain('live-caption-surface--empty')
   })
 })
