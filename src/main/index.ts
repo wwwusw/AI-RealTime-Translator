@@ -39,12 +39,20 @@ const createWindow = async () => {
     }
   })
 
-  if (process.env.VITE_DEV_SERVER_URL) {
-    await window.loadURL(process.env.VITE_DEV_SERVER_URL)
+  const devServerUrl = process.env.VITE_DEV_SERVER_URL || process.env.ELECTRON_RENDERER_URL
+
+  if (devServerUrl) {
+    await window.loadURL(devServerUrl)
     return
   }
 
-  await window.loadFile(join(__dirname, '../renderer/index.html'))
+  const rendererPath = join(__dirname, '../renderer/index.html')
+
+  try {
+    await window.loadFile(rendererPath)
+  } catch {
+    await window.loadURL('http://localhost:5173/')
+  }
 }
 
 app.whenReady().then(async () => {
