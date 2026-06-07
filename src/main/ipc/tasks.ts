@@ -143,7 +143,20 @@ const startPipelineRun = (filePath: string, config: AppConfig): PipelineTaskStat
 
   let cleanupPreparedMedia: (() => Promise<void>) | null = null
 
+  const updateSummary = (summary: string) => {
+    setTaskStatus(
+      buildTaskStatus({
+        filePath: currentTaskStatus.filePath,
+        inputMode: 'file',
+        sourceLabel: currentTaskStatus.sourceLabel,
+        stage: currentTaskStatus.stage,
+        lastRevisionSummary: summary
+      })
+    )
+  }
+
   const promise = (async () => {
+    updateSummary('正在归一化音频（ffmpeg）…')
     const prepared = await prepareNormalizedAudio(filePath)
     cleanupPreparedMedia = prepared.cleanup
 
@@ -151,6 +164,7 @@ const startPipelineRun = (filePath: string, config: AppConfig): PipelineTaskStat
       return
     }
 
+    updateSummary('正在连接 Qwen Live Translate 实时翻译服务…')
     const fileSession = await createFilePipelineSession({
       wavFilePath: prepared.normalizedFilePath,
       liveTranslateProvider,
@@ -167,18 +181,11 @@ const startPipelineRun = (filePath: string, config: AppConfig): PipelineTaskStat
           return
         }
 
-        setTaskStatus(
-          buildTaskStatus({
-            filePath: currentTaskStatus.filePath,
-            inputMode: 'file',
-            sourceLabel: currentTaskStatus.sourceLabel,
-            stage: currentTaskStatus.stage,
-            lastRevisionSummary: nextSummary
-          })
-        )
+        updateSummary(nextSummary)
       }
     })
 
+    updateSummary('已连接实时翻译服务，正在推送音频流…')
     await fileSession.run()
   })()
     .then(() => {

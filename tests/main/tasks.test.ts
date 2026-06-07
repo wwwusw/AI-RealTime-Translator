@@ -369,7 +369,10 @@ describe('registerTaskHandlers', () => {
     })
     await expect(getTaskStatus?.()).resolves.toMatchObject({
       stage: 'idle',
-      lastRevisionSummary: '任务已重置，请选择文件。'
+      filePath: null,
+      inputMode: 'file',
+      isRunning: false,
+      canStart: false
     })
   })
 })

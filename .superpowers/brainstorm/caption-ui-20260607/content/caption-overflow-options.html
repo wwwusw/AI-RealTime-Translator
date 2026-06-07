@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>字幕框方案</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: "Segoe UI Variable", "Microsoft YaHei UI", sans-serif;
+      background: #07121f;
+      color: #f7f9fc;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      padding: 48px 24px;
+      background:
+        linear-gradient(rgba(4, 12, 22, 0.72), rgba(4, 12, 22, 0.82)),
+        radial-gradient(circle at 25% 20%, #366185, transparent 42%),
+        linear-gradient(135deg, #142b3f, #07101d 72%);
+    }
+
+    main {
+      width: min(1080px, 100%);
+      margin: 0 auto;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 32px;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+
+    .intro {
+      max-width: 760px;
+      margin: 12px 0 32px;
+      color: #c6d1dc;
+      font-size: 16px;
+      line-height: 1.7;
+    }
+
+    .options {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 24px;
+    }
+
+    .option {
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 18px;
+      padding: 22px;
+      background: rgba(19, 29, 40, 0.6);
+      cursor: pointer;
+      transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+    }
+
+    .option:hover {
+      border-color: rgba(122, 192, 255, 0.65);
+      transform: translateY(-2px);
+    }
+
+    .option.selected {
+      border-color: #69b8ff;
+      background: rgba(38, 83, 119, 0.44);
+      box-shadow: 0 0 0 3px rgba(60, 156, 234, 0.16);
+    }
+
+    .option-label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+      color: #d9e9f8;
+      font-size: 14px;
+      font-weight: 650;
+      letter-spacing: 0.03em;
+    }
+
+    .letter {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      border-radius: 50%;
+      background: #2778b8;
+      color: white;
+    }
+
+    .stage {
+      min-height: 250px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 24px;
+      border-radius: 14px;
+      background:
+        linear-gradient(rgba(11, 24, 37, 0.14), rgba(5, 12, 20, 0.46)),
+        radial-gradient(circle at 62% 25%, #5d7890, #1c3447 48%, #0a1825);
+      box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.22);
+    }
+
+    .caption-shell {
+      width: min(560px, 96%);
+      min-height: 112px;
+      display: flex;
+      align-items: center;
+      padding: 19px 24px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 12px;
+      background: rgba(13, 15, 18, 0.88);
+      box-shadow:
+        0 14px 40px rgba(0, 0, 0, 0.42),
+        inset 0 1px rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(18px);
+    }
+
+    .caption-text {
+      margin: 0;
+      color: #ffffff;
+      font-size: 23px;
+      font-weight: 580;
+      line-height: 1.55;
+      letter-spacing: 0.01em;
+      text-wrap: pretty;
+    }
+
+    .old {
+      color: #aeb8c2;
+    }
+
+    .live {
+      color: #ffffff;
+    }
+
+    .fade {
+      color: rgba(174, 184, 194, 0.35);
+    }
+
+    h2 {
+      margin: 18px 0 7px;
+      font-size: 19px;
+      font-weight: 650;
+    }
+
+    .description {
+      margin: 0;
+      color: #b8c4cf;
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .rule {
+      margin-top: 28px;
+      padding: 18px 20px;
+      border-left: 3px solid #52a9eb;
+      border-radius: 0 10px 10px 0;
+      background: rgba(13, 17, 23, 0.66);
+      color: #cad5df;
+      line-height: 1.7;
+    }
+
+    @media (max-width: 760px) {
+      .options {
+        grid-template-columns: 1fr;
+      }
+
+      body {
+        padding: 28px 14px;
+      }
+
+      .caption-text {
+        font-size: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>单框实时字幕：50 字满了以后怎么更新？</h1>
+    <p class="intro">
+      两个方案都只有一个字幕框。实时翻译持续追加到末尾，DeepSeek 纠错时原位替换对应文字，
+      不展示块、状态、时间戳或 Waiting 占位。
+    </p>
+
+    <div class="options">
+      <article class="option" data-choice="a" onclick="selectOption(this)">
+        <div class="option-label"><span class="letter">A</span>按字符滑动，推荐</div>
+        <div class="stage">
+          <div class="caption-shell">
+            <p class="caption-text">
+              <span class="fade">……推动更多人参与讨论，</span><span class="old">并让每一种声音都能被听见。</span><span class="live">今天我们将继续探索新的可能</span>
+            </p>
+          </div>
+        </div>
+        <h2>始终保留最后 50 个字</h2>
+        <p class="description">新字从右侧追加；超过容量时，从最左侧逐字丢弃。画面连续、稳定，最接近 Windows 实时字幕的阅读体验。</p>
+      </article>
+
+      <article class="option" data-choice="b" onclick="selectOption(this)">
+        <div class="option-label"><span class="letter">B</span>按完整句淘汰</div>
+        <div class="stage">
+          <div class="caption-shell">
+            <p class="caption-text">
+              <span class="old">并让每一种声音都能被听见。</span><span class="live">今天我们将继续探索新的可能</span>
+            </p>
+          </div>
+        </div>
+        <h2>尽量保留完整句子</h2>
+        <p class="description">超过 50 字后，删除最前面一个完整句子。语义更完整，但每次删除时文本会产生较明显的跳动。</p>
+      </article>
+    </div>
+
+    <div class="rule">
+      建议显示规则：精翻文本覆盖实时文本，但不改变它在连续字幕中的位置；无有效翻译时保持当前文本不变，
+      不创建空行，也不显示任何等待提示。
+    </div>
+  </main>
+
+  <script>
+    function selectOption(element) {
+      document.querySelectorAll('.option').forEach((option) => option.classList.remove('selected'));
+      element.classList.add('selected');
+      document.title = `已选择方案 ${element.dataset.choice.toUpperCase()}`;
+    }
+  </script>
+</body>
+</html>

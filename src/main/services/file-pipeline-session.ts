@@ -105,20 +105,32 @@ export const createFilePipelineSession = async ({
   const run = async () => {
     const wavBuffer = await readFile(wavFilePath)
     const pcmData = extractMono16kPcmData(wavBuffer)
+    const totalDurationSec = (pcmData.length / (16_000 * 2)).toFixed(1)
+
+    console.log(
+      `[file-pipeline] Normalized audio loaded: ${pcmData.length} bytes PCM, ~${totalDurationSec}s`
+    )
 
     if (signal?.aborted) {
       return
     }
 
     const pcmChunks = buildPcmChunks(pcmData)
+    console.log(`[file-pipeline] Sending ${pcmChunks.length} PCM chunks to Live Translate provider`)
 
-    for (const chunk of pcmChunks) {
+    for (let i = 0; i < pcmChunks.length; i += 1) {
       signal?.throwIfAborted?.()
-      await session.appendChunk(chunk)
+      await session.appendChunk(pcmChunks[i]!)
+
+      if ((i + 1) % 20 === 0 || i === pcmChunks.length - 1) {
+        console.log(`[file-pipeline] Sent ${i + 1}/${pcmChunks.length} PCM chunks`)
+      }
     }
 
+    console.log('[file-pipeline] All PCM chunks sent, completing session...')
     signal?.throwIfAborted?.()
     await session.complete()
+    console.log('[file-pipeline] Session completed')
   }
 
   return {
