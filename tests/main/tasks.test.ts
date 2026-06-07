@@ -7,12 +7,8 @@ const browserWindowFromWebContentsMock = vi.fn()
 
 const loadConfigMock = vi.fn()
 const pickMediaFileMock = vi.fn()
-const runPipelineMock = vi.fn()
-const preparePipelineChunksMock = vi.fn()
-const createScriptedAsrProviderMock = vi.fn()
-const createOpenAiAudioAsrProviderMock = vi.fn()
-const createDashScopeRealtimeAsrProviderMock = vi.fn()
-const createOpenAiChatTranslationProviderMock = vi.fn()
+const prepareNormalizedAudioMock = vi.fn()
+const createFilePipelineSessionMock = vi.fn()
 const createOpenAiChatRefinementProviderMock = vi.fn()
 const createQwenLiveTranslateRealtimeProviderMock = vi.fn()
 const createSystemAudioPipelineSessionMock = vi.fn()
@@ -43,28 +39,15 @@ vi.mock('../../src/main/services/file-picker', () => ({
   pickMediaFile: pickMediaFileMock
 }))
 
-vi.mock('../../src/main/services/pipeline-runner', () => ({
-  runPipeline: runPipelineMock
-}))
-
 vi.mock('../../src/main/services/pipeline-media-prep', () => ({
-  preparePipelineChunks: preparePipelineChunksMock
+  prepareNormalizedAudio: prepareNormalizedAudioMock
 }))
 
-vi.mock('../../src/main/services/providers/scripted-asr-provider', () => ({
-  createScriptedAsrProvider: createScriptedAsrProviderMock
-}))
-
-vi.mock('../../src/main/services/providers/openai-audio-asr-provider', () => ({
-  createOpenAiAudioAsrProvider: createOpenAiAudioAsrProviderMock
-}))
-
-vi.mock('../../src/main/services/providers/dashscope-realtime-asr-provider', () => ({
-  createDashScopeRealtimeAsrProvider: createDashScopeRealtimeAsrProviderMock
+vi.mock('../../src/main/services/file-pipeline-session', () => ({
+  createFilePipelineSession: createFilePipelineSessionMock
 }))
 
 vi.mock('../../src/main/services/providers/openai-chat-translation-provider', () => ({
-  createOpenAiChatTranslationProvider: createOpenAiChatTranslationProviderMock,
   createOpenAiChatRefinementProvider: createOpenAiChatRefinementProviderMock
 }))
 
@@ -82,6 +65,31 @@ const createAbortError = (): Error => {
   return error
 }
 
+const baseConfig = {
+  refiner: {
+    baseUrl: 'https://api.deepseek.com',
+    apiKey: 'translation-key',
+    model: 'deepseek-v4-flash'
+  },
+  asr: {
+    provider: 'scripted' as const,
+    baseUrl: 'https://api.openai.com/v1',
+    apiKey: '',
+    model: 'unused'
+  },
+  liveTranslate: {
+    baseUrl: 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime',
+    apiKey: 'live-translate-key',
+    model: 'qwen3.5-livetranslate-flash-realtime',
+    sourceLanguage: 'en',
+    targetLanguage: 'zh'
+  },
+  revisionWindowSize: 4,
+  blockDurationMs: 2000,
+  chunkDurationMs: 5000,
+  chunkOverlapMs: 1000
+}
+
 describe('registerTaskHandlers', () => {
   beforeEach(() => {
     handlers.clear()
@@ -90,61 +98,54 @@ describe('registerTaskHandlers', () => {
 
     loadConfigMock.mockReturnValue({
       inputMode: 'file',
-      refiner: {
-        baseUrl: 'https://api.deepseek.com',
-        apiKey: 'translation-key',
-        model: 'deepseek-v4-flash'
-      },
-      asr: {
-        provider: 'openai-audio',
-        baseUrl: 'https://api.openai.com/v1',
-        apiKey: 'asr-key',
-        model: 'gpt-4o-mini-transcribe'
-      },
-      liveTranslate: {
-        baseUrl: 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime',
-        apiKey: 'live-translate-key',
-        model: 'qwen3.5-livetranslate-flash-realtime',
-        sourceLanguage: 'en',
-        targetLanguage: 'zh'
-      },
-      revisionWindowSize: 4,
-      blockDurationMs: 2000,
-      chunkDurationMs: 5000,
-      chunkOverlapMs: 1000
+      ...baseConfig
     })
     pickMediaFileMock.mockResolvedValue({ filePath: 'fixtures/input.wav' })
-    preparePipelineChunksMock.mockResolvedValue({
+    prepareNormalizedAudioMock.mockResolvedValue({
       normalizedFilePath: 'fixtures/normalized.wav',
-      chunks: [
-        {
-          index: 0,
-          startMs: 0,
-          endMs: 5_000,
-          filePath: 'fixtures/chunk-0.wav'
-        },
-        {
-          index: 1,
-          startMs: 4_000,
-          endMs: 9_000,
-          filePath: 'fixtures/chunk-1.wav'
-        }
-      ],
       cleanup: vi.fn().mockResolvedValue(undefined)
     })
-    createScriptedAsrProviderMock.mockReturnValue({
-      transcribeChunk: vi.fn().mockResolvedValue('scripted transcript')
+
+    createFilePipelineSessionMock.mockImplementation(async ({ emitEvent }) => {
+      return {
+        run: vi.fn().mockImplementation(async () => {
+          emitEvent({
+            type: 'subtitle-blocks-updated',
+            blocks: [
+              {
+                id: 'block-0',
+                index: 0,
+                startMs: 0,
+                endMs: 2000,
+                sourceTranscript: 'hello conference',
+                liveTranslation: '你好会议',
+                refinedTranslation: '',
+                status: 'live',
+                updatedAt: 1
+              }
+            ]
+          })
+          emitEvent({
+            type: 'subtitle-blocks-updated',
+            blocks: [
+              {
+                id: 'block-0',
+                index: 0,
+                startMs: 0,
+                endMs: 2000,
+                sourceTranscript: 'hello conference',
+                liveTranslation: '你好会议',
+                refinedTranslation: '你好，欢迎参加本次会议。',
+                status: 'refined',
+                updatedAt: 2
+              }
+            ]
+          })
+        }),
+        getSession: vi.fn()
+      }
     })
-    createOpenAiAudioAsrProviderMock.mockReturnValue({
-      transcribeChunk: vi.fn().mockResolvedValue('hello conference')
-    })
-    createDashScopeRealtimeAsrProviderMock.mockReturnValue({
-      transcribeChunk: vi.fn().mockResolvedValue('hello conference from dashscope')
-    })
-    createOpenAiChatTranslationProviderMock.mockReturnValue({
-      translateBatch: vi.fn().mockResolvedValue([{ id: 'chunk-0', chinese: 'draft translation' }]),
-      reviseBatch: vi.fn().mockResolvedValue([{ id: 'chunk-0', chinese: 'revised translation' }])
-    })
+
     createOpenAiChatRefinementProviderMock.mockReturnValue({
       refineBlocks: vi.fn().mockResolvedValue([])
     })
@@ -158,69 +159,7 @@ describe('registerTaskHandlers', () => {
     })
   })
 
-  it('starts the pipeline with prepared chunks, forwards pipeline events to the window, and records the latest revision summary', async () => {
-    runPipelineMock.mockImplementation(async ({ emitEvent }) => {
-      emitEvent({
-        type: 'subtitle-pending',
-        chunk: {
-          index: 0,
-          startMs: 0,
-          endMs: 5_000,
-          filePath: 'fixtures/chunk-0.wav'
-        },
-        subtitle: {
-          id: 'chunk-0',
-          english: '',
-          chinese: '',
-          status: 'draft',
-          revisionCount: 0,
-          updatedAt: 0
-        }
-      })
-      emitEvent({
-        type: 'subtitle-added',
-        chunk: {
-          index: 0,
-          startMs: 0,
-          endMs: 5_000,
-          filePath: 'fixtures/chunk-0.wav'
-        },
-        subtitle: {
-          id: 'chunk-0',
-          english: 'hello conference',
-          chinese: 'draft translation',
-          status: 'draft',
-          revisionCount: 0,
-          updatedAt: 1
-        }
-      })
-      emitEvent({
-        type: 'subtitle-revised',
-        subtitle: {
-          id: 'chunk-0',
-          english: 'hello conference',
-          chinese: 'revised translation',
-          status: 'final',
-          revisionCount: 1,
-          updatedAt: 2
-        }
-      })
-      emitEvent({
-        type: 'pipeline-completed',
-        subtitles: [
-          {
-            id: 'chunk-0',
-            english: 'hello conference',
-            chinese: 'revised translation',
-            status: 'final',
-            revisionCount: 1,
-            updatedAt: 2
-          }
-        ]
-      })
-      return []
-    })
-
+  it('starts the file pipeline with normalized audio, forwards live translate events to the window, and reports realtime status', async () => {
     const { registerTaskHandlers } = await import('../../src/main/ipc/tasks')
     registerTaskHandlers()
 
@@ -243,119 +182,42 @@ describe('registerTaskHandlers', () => {
       await expect(getTaskStatus?.()).resolves.toMatchObject({
         stage: 'completed',
         isRunning: false,
-        canStart: true,
-        lastRevisionSummary: '最新精翻：revised translation'
+        canStart: true
       })
     })
 
-    expect(createOpenAiAudioAsrProviderMock).toHaveBeenCalledWith({
-      baseUrl: 'https://api.openai.com/v1',
-      apiKey: 'asr-key',
-      model: 'gpt-4o-mini-transcribe'
+    expect(createQwenLiveTranslateRealtimeProviderMock).toHaveBeenCalledWith({
+      baseUrl: 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime',
+      apiKey: 'live-translate-key',
+      model: 'qwen3.5-livetranslate-flash-realtime',
+      sourceLanguage: 'en',
+      targetLanguage: 'zh'
     })
-    expect(createOpenAiChatTranslationProviderMock).toHaveBeenCalledWith({
+    expect(createOpenAiChatRefinementProviderMock).toHaveBeenCalledWith({
       baseUrl: 'https://api.deepseek.com',
       apiKey: 'translation-key',
       model: 'deepseek-v4-flash'
     })
-    expect(preparePipelineChunksMock).toHaveBeenCalledWith('fixtures/input.wav', {
-      chunkDurationMs: 5000,
-      chunkOverlapMs: 1000
-    })
-    expect(runPipelineMock).toHaveBeenCalledWith(
+    expect(prepareNormalizedAudioMock).toHaveBeenCalledWith('fixtures/input.wav')
+    expect(createFilePipelineSessionMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        chunks: [
-          {
-            index: 0,
-            startMs: 0,
-            endMs: 5_000,
-            filePath: 'fixtures/chunk-0.wav'
-          },
-          {
-            index: 1,
-            startMs: 4_000,
-            endMs: 9_000,
-            filePath: 'fixtures/chunk-1.wav'
-          }
-        ],
-        revisionWindowSize: 4,
+        wavFilePath: 'fixtures/normalized.wav',
+        blockDurationMs: 2000,
+        sourceLanguage: 'en',
+        targetLanguage: 'zh',
         signal: expect.any(AbortSignal)
       })
     )
     expect(browserWindowSendMock).toHaveBeenCalledWith(
       pipelineTaskChannels.pipelineEvent,
-      expect.objectContaining({ type: 'subtitle-pending' })
+      expect.objectContaining({ type: 'subtitle-blocks-updated' })
     )
-    expect(browserWindowSendMock).toHaveBeenCalledWith(
-      pipelineTaskChannels.pipelineEvent,
-      expect.objectContaining({ type: 'subtitle-added' })
-    )
-    expect(browserWindowSendMock).toHaveBeenCalledWith(
-      pipelineTaskChannels.pipelineEvent,
-      expect.objectContaining({ type: 'subtitle-revised' })
-    )
-  })
-
-  it('selects the DashScope realtime ASR provider when configured', async () => {
-    loadConfigMock.mockReturnValue({
-      inputMode: 'file',
-      refiner: {
-        baseUrl: 'https://api.deepseek.com',
-        apiKey: 'translation-key',
-        model: 'deepseek-v4-flash'
-      },
-      asr: {
-        provider: 'dashscope-realtime',
-        baseUrl: 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime',
-        apiKey: 'dashscope-key',
-        model: 'qwen3-asr-flash-realtime'
-      },
-      revisionWindowSize: 4,
-      chunkDurationMs: 5000,
-      chunkOverlapMs: 1000
-    })
-    runPipelineMock.mockResolvedValue([])
-
-    const { registerTaskHandlers } = await import('../../src/main/ipc/tasks')
-    registerTaskHandlers()
-
-    const startTask = handlers.get(pipelineTaskChannels.startTask)
-    await startTask?.({}, 'fixtures/input.wav')
-
-    expect(createDashScopeRealtimeAsrProviderMock).toHaveBeenCalledWith({
-      baseUrl: 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime',
-      apiKey: 'dashscope-key',
-      model: 'qwen3-asr-flash-realtime'
-    })
-    expect(createOpenAiAudioAsrProviderMock).not.toHaveBeenCalled()
-    expect(createScriptedAsrProviderMock).not.toHaveBeenCalled()
   })
 
   it('starts a system-audio session and forwards captured chunks to the streaming pipeline', async () => {
     loadConfigMock.mockReturnValue({
       inputMode: 'system-audio',
-      refiner: {
-        baseUrl: 'https://api.deepseek.com',
-        apiKey: 'translation-key',
-        model: 'deepseek-v4-flash'
-      },
-      asr: {
-        provider: 'scripted',
-        baseUrl: 'https://api.openai.com/v1',
-        apiKey: '',
-        model: 'unused-for-system-audio'
-      },
-      liveTranslate: {
-        baseUrl: 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime',
-        apiKey: 'dashscope-key',
-        model: 'qwen3.5-livetranslate-flash-realtime',
-        sourceLanguage: 'en',
-        targetLanguage: 'zh'
-      },
-      revisionWindowSize: 4,
-      blockDurationMs: 2000,
-      chunkDurationMs: 5000,
-      chunkOverlapMs: 1000
+      ...baseConfig
     })
     const appendChunk = vi.fn().mockResolvedValue(undefined)
     const complete = vi.fn().mockResolvedValue(undefined)
@@ -395,7 +257,7 @@ describe('registerTaskHandlers', () => {
     })
     expect(createQwenLiveTranslateRealtimeProviderMock).toHaveBeenCalledWith({
       baseUrl: 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime',
-      apiKey: 'dashscope-key',
+      apiKey: 'live-translate-key',
       model: 'qwen3.5-livetranslate-flash-realtime',
       sourceLanguage: 'en',
       targetLanguage: 'zh'
@@ -444,17 +306,22 @@ describe('registerTaskHandlers', () => {
     })
   })
 
-  it('aborts the in-flight pipeline on pause and reset, and does not start twice', async () => {
+  it('aborts the in-flight file pipeline on pause and reset, and does not start twice', async () => {
     let abortSignal: AbortSignal | undefined
 
-    runPipelineMock.mockImplementation(
-      ({ signal }: { signal?: AbortSignal }) =>
-        new Promise((_, reject) => {
-          abortSignal = signal
-          signal?.addEventListener('abort', () => {
-            reject(createAbortError())
-          })
-        })
+    createFilePipelineSessionMock.mockImplementation(
+      async ({ signal }: { signal?: AbortSignal }) => {
+        abortSignal = signal
+        return {
+          run: () =>
+            new Promise((_, reject) => {
+              signal?.addEventListener('abort', () => {
+                reject(createAbortError())
+              })
+            }),
+          getSession: vi.fn()
+        }
+      }
     )
 
     const { registerTaskHandlers } = await import('../../src/main/ipc/tasks')
@@ -468,7 +335,7 @@ describe('registerTaskHandlers', () => {
     await startTask?.({}, 'fixtures/input.wav')
     const secondStartStatus = await startTask?.({}, 'fixtures/input.wav')
 
-    expect(runPipelineMock).toHaveBeenCalledTimes(1)
+    expect(createFilePipelineSessionMock).toHaveBeenCalledTimes(1)
     expect(secondStartStatus).toMatchObject({
       stage: 'running',
       isRunning: true

@@ -1,4 +1,3 @@
-import { basename } from 'node:path'
 import { BrowserWindow, ipcMain } from 'electron'
 import type { AppConfig } from '../../shared/config'
 import {
@@ -11,16 +10,12 @@ import {
 } from '../../shared/pipeline'
 import { loadConfig } from '../services/config-store'
 import { pickMediaFile } from '../services/file-picker'
-import { preparePipelineChunks } from '../services/pipeline-media-prep'
-import { runPipeline } from '../services/pipeline-runner'
-import { createDashScopeRealtimeAsrProvider } from '../services/providers/dashscope-realtime-asr-provider'
-import { createOpenAiAudioAsrProvider } from '../services/providers/openai-audio-asr-provider'
+import { prepareNormalizedAudio } from '../services/pipeline-media-prep'
+import { createFilePipelineSession } from '../services/file-pipeline-session'
 import {
-  createOpenAiChatRefinementProvider,
-  createOpenAiChatTranslationProvider
+  createOpenAiChatRefinementProvider
 } from '../services/providers/openai-chat-translation-provider'
 import { createQwenLiveTranslateRealtimeProvider } from '../services/providers/qwen-live-translate-realtime-provider'
-import { createScriptedAsrProvider } from '../services/providers/scripted-asr-provider'
 import {
   createSystemAudioPipelineSession,
   type SystemAudioPipelineSession
@@ -74,29 +69,6 @@ const createIdleTaskStatus = (
     lastRevisionSummary: summary
   })
 
-const createAsrProvider = (config: AppConfig) => {
-  switch (config.asr.provider) {
-    case 'openai-audio':
-      return createOpenAiAudioAsrProvider({
-        baseUrl: config.asr.baseUrl,
-        apiKey: config.asr.apiKey,
-        model: config.asr.model
-      })
-    case 'dashscope-realtime':
-      return createDashScopeRealtimeAsrProvider({
-        baseUrl: config.asr.baseUrl,
-        apiKey: config.asr.apiKey,
-        model: config.asr.model
-      })
-    case 'scripted':
-    default:
-      return createScriptedAsrProvider({
-        getEnglishByChunk: async ({ chunkIndex, filePath }) =>
-          `Scripted transcript ${chunkIndex + 1} from ${basename(filePath)}`
-      })
-  }
-}
-
 const createRevisionSummary = (event: PipelineEvent): string | null => {
   switch (event.type) {
     case 'subtitle-blocks-updated': {
@@ -119,15 +91,15 @@ const createRevisionSummary = (event: PipelineEvent): string | null => {
         latestBlock.sourceTranscript
       }`
     }
-    case 'subtitle-revised':
-      return `最新精翻：${event.subtitle.chinese}`
     case 'subtitle-pending':
       return '正在等待下一段字幕。'
     case 'subtitle-added':
       return `字幕草稿：${event.subtitle.english}`
+    case 'subtitle-revised':
+      return `最新精翻：${event.subtitle.chinese}`
     case 'pipeline-completed':
       return event.subtitles.length > 0
-        ? null
+        ? '处理已完成。'
         : '处理已完成，但没有生成字幕。'
     default:
       return null
@@ -156,8 +128,8 @@ const broadcastPipelineEvent = (event: PipelineEvent) => {
 
 const startPipelineRun = (filePath: string, config: AppConfig): PipelineTaskStatus => {
   const controller = new AbortController()
-  const translationProvider = createOpenAiChatTranslationProvider(config.refiner)
-  const asrProvider = createAsrProvider(config)
+  const refinementProvider = createOpenAiChatRefinementProvider(config.refiner)
+  const liveTranslateProvider = createQwenLiveTranslateRealtimeProvider(config.liveTranslate)
 
   setTaskStatus(
     buildTaskStatus({
@@ -165,28 +137,27 @@ const startPipelineRun = (filePath: string, config: AppConfig): PipelineTaskStat
       inputMode: 'file',
       sourceLabel: filePath,
       stage: 'running',
-      lastRevisionSummary: '任务已启动，正在等待字幕。'
+      lastRevisionSummary: '任务已启动，正在等待第一段字幕。'
     })
   )
 
   let cleanupPreparedMedia: (() => Promise<void>) | null = null
 
   const promise = (async () => {
-    const preparedPipeline = await preparePipelineChunks(filePath, {
-      chunkDurationMs: config.chunkDurationMs,
-      chunkOverlapMs: config.chunkOverlapMs
-    })
-    cleanupPreparedMedia = preparedPipeline.cleanup
+    const prepared = await prepareNormalizedAudio(filePath)
+    cleanupPreparedMedia = prepared.cleanup
 
     if (controller.signal.aborted) {
       return
     }
 
-    await runPipeline({
-      chunks: preparedPipeline.chunks,
-      asrProvider,
-      translationProvider,
-      revisionWindowSize: config.revisionWindowSize,
+    const fileSession = await createFilePipelineSession({
+      wavFilePath: prepared.normalizedFilePath,
+      liveTranslateProvider,
+      refinementProvider,
+      blockDurationMs: config.blockDurationMs,
+      sourceLanguage: config.liveTranslate.sourceLanguage,
+      targetLanguage: config.liveTranslate.targetLanguage,
       signal: controller.signal,
       emitEvent: (event) => {
         broadcastPipelineEvent(event)
@@ -207,6 +178,8 @@ const startPipelineRun = (filePath: string, config: AppConfig): PipelineTaskStat
         )
       }
     })
+
+    await fileSession.run()
   })()
     .then(() => {
       if (runningTask?.controller !== controller || controller.signal.aborted) {

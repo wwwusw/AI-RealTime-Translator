@@ -114,3 +114,25 @@ export const preparePipelineChunks = async (
 }
 
 export const expectedNormalizedWavByteRate = PCM_MONO_16K_BYTE_RATE
+
+export const prepareNormalizedAudio = async (
+  inputFilePath: string
+): Promise<{
+  normalizedFilePath: string
+  cleanup: () => Promise<void>
+}> => {
+  const workingDirectory = await mkdtemp(join(tmpdir(), 'ai-realtime-translator-'))
+  const normalizedFilePath = join(workingDirectory, 'normalized.wav')
+
+  const cleanup = async () => {
+    await rm(workingDirectory, { recursive: true, force: true })
+  }
+
+  try {
+    await normalizeAudioToMono16kWav(inputFilePath, normalizedFilePath)
+    return { normalizedFilePath, cleanup }
+  } catch (error) {
+    await cleanup()
+    throw error
+  }
+}
