@@ -225,22 +225,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
         const taskPatch: Partial<AppStoreTaskState> = {}
 
         if (event.type === 'subtitle-blocks-updated') {
-          const latestBlock = [...event.blocks]
-            .reverse()
-            .find(
-              (b) =>
-                b.refinedTranslation.trim().length > 0 ||
-                b.liveTranslation.trim().length > 0 ||
-                b.sourceTranscript.trim().length > 0
-            )
-          if (latestBlock) {
-            taskPatch.lastRevisionSummary =
-              `实时字幕：${
-                latestBlock.refinedTranslation ||
-                latestBlock.liveTranslation ||
-                latestBlock.sourceTranscript
-              }`
-          }
+          const refinedCount = event.blocks.filter(
+            (b) => b.status === 'refined'
+          ).length
+          const totalCount = event.blocks.length
+          taskPatch.lastRevisionSummary = `正在实时翻译… 已精校 ${refinedCount}/${totalCount} 段`
         }
 
         if (event.type === 'pipeline-completed') {

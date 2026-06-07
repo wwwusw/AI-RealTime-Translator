@@ -85,18 +85,19 @@ const createRevisionSummary = (event: PipelineEvent): string | null => {
         return '正在等待下一段实时翻译。'
       }
 
-      return `实时字幕：${
-        latestBlock.refinedTranslation ||
-        latestBlock.liveTranslation ||
-        latestBlock.sourceTranscript
-      }`
+      const refinedCount = event.blocks.filter(
+        (b) => b.status === 'refined'
+      ).length
+      const totalCount = event.blocks.length
+
+      return `正在实时翻译… 已精校 ${refinedCount}/${totalCount} 段`
     }
     case 'subtitle-pending':
       return '正在等待下一段字幕。'
     case 'subtitle-added':
-      return `字幕草稿：${event.subtitle.english}`
+      return '字幕已生成，正在翻译。'
     case 'subtitle-revised':
-      return `最新精翻：${event.subtitle.chinese}`
+      return '字幕精校完成。'
     case 'pipeline-completed':
       return event.subtitles.length > 0
         ? '处理已完成。'
