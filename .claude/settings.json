@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git merge *)",
+      "Bash(git checkout *)",
+      "Bash(git -C .worktrees/feat-electron-mvp status --porcelain)",
+      "Bash(npx tsc *)",
+      "Bash(npx vitest *)",
+      "Bash(git add *)"
+    ]
+  }
+}
