@@ -248,9 +248,11 @@ describe('useAppStore task controls', () => {
     )
     const resetTask = vi.fn().mockResolvedValue(createStatus())
 
+    const fileModeConfig = { ...defaultAppConfig, inputMode: 'file' as const }
+
     window.appConfig = {
-      load: vi.fn().mockResolvedValue(defaultAppConfig),
-      save: vi.fn().mockResolvedValue(defaultAppConfig)
+      load: vi.fn().mockResolvedValue(fileModeConfig),
+      save: vi.fn().mockResolvedValue(fileModeConfig)
     }
     window.pipelineTasks = {
       pickMediaFile,
@@ -261,6 +263,9 @@ describe('useAppStore task controls', () => {
     }
 
     const { useAppStore } = await import('../../src/renderer/src/state/useAppStore')
+
+    // Override the default config to file mode for this file-mode test
+    useAppStore.setState({ config: fileModeConfig })
 
     await useAppStore.getState().pick()
     expect(useAppStore.getState().filePath).toBe('fixtures/chunk-0.wav')

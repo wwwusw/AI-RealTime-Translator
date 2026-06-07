@@ -1,0 +1,131 @@
+/* ── Floating window root ────────────────────────────────────────────── */
+.floating-window {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: rgba(18, 20, 24, 0.92);
+  backdrop-filter: blur(16px);
+  border-radius: 12px;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* ── Drag bar (title bar) ───────────────────────────────────────────── */
+.floating-drag-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  padding: 0 10px 0 14px;
+  -webkit-app-region: drag;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.floating-title {
+  color: rgba(255, 255, 255, 0.48);
+  font-family: "Segoe UI Variable", "Microsoft YaHei UI", sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+.floating-close-btn {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.floating-close-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* ── Subtitle area ──────────────────────────────────────────────────── */
+.floating-subtitle-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Placeholder (empty state) ──────────────────────────────────────── */
+.floating-subtitle-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.floating-placeholder-text {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.32);
+  font-family: "Segoe UI Variable", "Microsoft YaHei UI", sans-serif;
+  font-size: 18px;
+  font-weight: 400;
+  text-align: center;
+}
+
+/* ── Scrollable subtitle content ────────────────────────────────────── */
+.floating-subtitle-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 18px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+
+.floating-subtitle-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+
+.floating-subtitle-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.floating-subtitle-scroll::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.floating-subtitle-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.floating-subtitle-lines {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+/* ── Individual subtitle lines ──────────────────────────────────────── */
+.floating-subtitle-line {
+  margin: 0;
+  color: #fff;
+  font-family: "Segoe UI Variable", "Microsoft YaHei UI", sans-serif;
+  font-size: 20px;
+  font-weight: 590;
+  line-height: 1.55;
+  letter-spacing: 0.012em;
+  padding: 2px 0;
+  text-wrap: pretty;
+}
+
+.floating-pause-break {
+  height: 0.8em;
+  flex-shrink: 0;
+}

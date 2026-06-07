@@ -20,6 +20,7 @@ import {
   createSystemAudioPipelineSession,
   type SystemAudioPipelineSession
 } from '../services/system-audio-session'
+import { cacheSubtitleBlocks } from './floating-window'
 
 type FileRunningTask = {
   kind: 'file'
@@ -122,6 +123,12 @@ const isSystemAudioTask = (task: RunningTask | null): task is SystemAudioRunning
   task?.kind === 'system-audio'
 
 const broadcastPipelineEvent = (event: PipelineEvent) => {
+  // Cache subtitle blocks so new windows can sync initial state
+  if (event.type === 'subtitle-blocks-updated') {
+    const summary = createRevisionSummary(event) ?? '正在实时翻译…'
+    cacheSubtitleBlocks(event.blocks, summary)
+  }
+
   for (const window of BrowserWindow.getAllWindows()) {
     window.webContents.send(pipelineTaskChannels.pipelineEvent, event)
   }

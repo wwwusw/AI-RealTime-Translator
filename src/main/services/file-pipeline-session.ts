@@ -91,7 +91,7 @@ export const createFilePipelineSession = async ({
   blockDurationMs,
   sourceLanguage,
   targetLanguage,
-  speedMultiplier = 2,
+  speedMultiplier = 1,
   signal
 }: FilePipelineSessionOptions): Promise<FilePipelineSessionHandle> => {
   const session = await createSystemAudioPipelineSession({

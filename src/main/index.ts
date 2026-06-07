@@ -2,7 +2,12 @@ import { app, BrowserWindow, desktopCapturer, session } from 'electron'
 import { join } from 'node:path'
 import { registerConfigHandlers } from './ipc/config'
 import { registerTaskHandlers } from './ipc/tasks'
+import { registerFloatingWindowHandlers } from './ipc/floating-window'
+import { destroyFloatingWindow } from './services/floating-window-manager'
+import { registerMediaProtocol } from './services/media-protocol'
 import { getPreloadPath } from './paths'
+
+let mainWindow: BrowserWindow | null = null
 
 const registerSystemAudioCapture = () => {
   session.defaultSession.setDisplayMediaRequestHandler(
@@ -29,7 +34,7 @@ const registerSystemAudioCapture = () => {
 }
 
 const createWindow = async () => {
-  const window = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
     webPreferences: {
@@ -39,25 +44,36 @@ const createWindow = async () => {
     }
   })
 
+  mainWindow.on('close', () => {
+    // Close floating window when main window closes
+    destroyFloatingWindow()
+  })
+
+  mainWindow.on('closed', () => {
+    mainWindow = null
+  })
+
   const devServerUrl = process.env.VITE_DEV_SERVER_URL || process.env.ELECTRON_RENDERER_URL
 
   if (devServerUrl) {
-    await window.loadURL(devServerUrl)
+    await mainWindow.loadURL(devServerUrl)
     return
   }
 
   const rendererPath = join(__dirname, '../renderer/index.html')
 
   try {
-    await window.loadFile(rendererPath)
+    await mainWindow.loadFile(rendererPath)
   } catch {
-    await window.loadURL('http://localhost:5173/')
+    await mainWindow.loadURL('http://localhost:5173/')
   }
 }
 
 app.whenReady().then(async () => {
+  registerMediaProtocol()
   registerConfigHandlers()
   registerTaskHandlers()
+  registerFloatingWindowHandlers(__dirname)
   registerSystemAudioCapture()
   await createWindow()
 })

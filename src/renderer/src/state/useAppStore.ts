@@ -41,12 +41,14 @@ type AppStore = {
   lastRevisionSummary: string
   subtitleBlocks: TimelineSubtitleBlock[]
   timelineMode: TimelineMode
+  mediaPlaying: boolean
   hydrateConfig: () => Promise<void>
   saveConfig: (config: AppConfig) => Promise<void>
   pick: () => Promise<void>
   start: () => Promise<void>
   pause: () => Promise<void>
   reset: () => Promise<void>
+  setMediaPlaying: (playing: boolean) => void
 }
 
 let unsubscribeFromPipelineEvents: (() => void) | null = null
@@ -211,6 +213,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   config: defaultAppConfig,
   ...createTaskState(),
   subtitleBlocks: [],
+  mediaPlaying: false,
   hydrateConfig: async () => {
     const appConfigBridge = getAppConfigBridge()
     const pipelineTasksBridge = getPipelineTasksBridge()
@@ -240,6 +243,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
           taskPatch.lastRevisionSummary = event.subtitles.length > 0
             ? '处理已完成。'
             : '处理已完成，但没有生成字幕。'
+        }
+
+        return {
+          subtitleBlocks: nextBlocks,
+          mediaPlaying:
+            event.type === 'pipeline-completed' ? false : state.mediaPlaying,
+          ...taskPatch
         }
 
         return {
@@ -383,7 +393,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const status = await bridge.startTask(get().filePath)
       set({
         ...createTaskState(status),
-        subtitleBlocks: []
+        subtitleBlocks: [],
+        mediaPlaying: true
       })
     } catch (error) {
       set({
@@ -402,7 +413,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const status = await bridge.pauseTask()
       set((state) => ({
         ...createTaskState(status),
-        subtitleBlocks: state.subtitleBlocks
+        subtitleBlocks: state.subtitleBlocks,
+        mediaPlaying: false
       }))
     } catch (error) {
       set({
@@ -436,12 +448,16 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const status = await bridge.resetTask()
       set({
         ...createTaskState(status),
-        subtitleBlocks: []
+        subtitleBlocks: [],
+        mediaPlaying: false
       })
     } catch (error) {
       set({
         lastRevisionSummary: `重置任务失败：${summarizeError(error)}`
       })
     }
+  },
+  setMediaPlaying: (playing) => {
+    set({ mediaPlaying: playing })
   }
 }))
