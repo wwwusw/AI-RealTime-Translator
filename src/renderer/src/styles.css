@@ -154,12 +154,8 @@ dd {
   background: rgba(255, 255, 255, 0.72);
 }
 
+/* Shared surface chrome (decorative frame) */
 .live-caption-surface {
-  height: 132px;
-  display: flex;
-  align-items: center;
-  padding: 22px 28px;
-  overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 12px;
   background: rgba(12, 14, 17, 0.9);
@@ -169,16 +165,86 @@ dd {
   backdrop-filter: blur(18px);
 }
 
+/* ── Empty / placeholder surface ──────────────────────────────────── */
+.live-caption-surface--empty {
+  height: 132px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 22px 28px;
+}
+
+.live-caption-text--placeholder {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.42);
+  font-family: "Segoe UI Variable", "Microsoft YaHei UI", sans-serif;
+  font-size: 20px;
+  font-weight: 400;
+  text-align: center;
+}
+
+/* ── Scrollable transcript surface ────────────────────────────────── */
+/*
+ * Two-layer structure:
+ *   Outer (.live-caption-surface--scrollable) — plain block layout,
+ *     fixed height, overflow-y:auto.  No flex, so scrollHeight reliably
+ *     equals the true content height.
+ *   Inner (.live-caption-lines) — flex column that sticks short content
+ *     to the bottom via justify-content:flex-end + min-height:100%.
+ */
+.live-caption-surface--scrollable {
+  height: 132px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 14px 24px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+.live-caption-lines {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+/* WebKit scrollbar styling */
+.live-caption-surface--scrollable::-webkit-scrollbar {
+  width: 6px;
+}
+
+.live-caption-surface--scrollable::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.live-caption-surface--scrollable::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.live-caption-surface--scrollable::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.32);
+}
+
+/* ── Individual caption lines ─────────────────────────────────────── */
 .live-caption-text {
-  width: 100%;
   margin: 0;
   color: #fff;
   font-family: "Segoe UI Variable", "Microsoft YaHei UI", sans-serif;
-  font-size: 24px;
   font-weight: 590;
   line-height: 1.55;
   letter-spacing: 0.012em;
+}
+
+.live-caption-line {
+  font-size: 22px;
+  padding: 3px 0;
   text-wrap: pretty;
+}
+
+.caption-pause-break {
+  height: 0.9em;
+  flex-shrink: 0;
 }
 
 .task-buttons {
@@ -224,12 +290,17 @@ dd {
     padding: 14px;
   }
 
-  .live-caption-surface {
+  .live-caption-surface--empty {
     height: 144px;
     padding: 20px;
   }
 
-  .live-caption-text {
-    font-size: 21px;
+  .live-caption-surface--scrollable {
+    height: 144px;
+    padding: 12px 18px;
+  }
+
+  .live-caption-line {
+    font-size: 19px;
   }
 }

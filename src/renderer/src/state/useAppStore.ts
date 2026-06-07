@@ -13,7 +13,7 @@ import {
   type SystemAudioCaptureHandle,
   type SystemAudioStopMode
 } from '../system-audio-capture'
-import { mergeCaptionBlocks } from '../features/subtitles/compose-caption-text'
+import { mergeCaptionBlocksKeepAll } from '../features/subtitles/compose-caption-text'
 
 export type TimelineSubtitleBlock = SubtitleBlock
 
@@ -119,7 +119,7 @@ const createModeResetState = (
 }
 
 const trimBlockWindow = (blocks: TimelineSubtitleBlock[]): TimelineSubtitleBlock[] =>
-  blocks.slice(-6)
+  blocks.slice(-200)
 
 const upsertBlock = (
   blocks: TimelineSubtitleBlock[],
@@ -140,7 +140,7 @@ const applyPipelineEventToBlocks = (
 ): TimelineSubtitleBlock[] => {
   switch (event.type) {
     case 'subtitle-blocks-updated':
-      return mergeCaptionBlocks(blocks, event.blocks)
+      return mergeCaptionBlocksKeepAll(blocks, event.blocks)
     case 'subtitle-pending':
     case 'subtitle-added':
       return upsertBlock(blocks, {
