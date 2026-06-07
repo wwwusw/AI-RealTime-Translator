@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useCallback, useEffect } from 'react'
 import { SettingsPanel } from './features/settings/SettingsPanel'
 import { StatusBar } from './features/status/StatusBar'
 import { SubtitleTimeline } from './features/subtitles/SubtitleTimeline'
@@ -27,13 +27,17 @@ export default function App() {
     void hydrateConfig()
   }, [hydrateConfig])
 
+  const handleOpenFloatingWindow = useCallback(() => {
+    window.floatingWindow?.open()
+  }, [])
+
   return (
     <main className="app-shell">
       <section className="hero-card">
         <p className="eyebrow">AI 实时翻译</p>
-        <h1>本地文件与系统声音的实时字幕翻译</h1>
+        <h1>系统声音实时字幕翻译</h1>
         <p>
-          导入本地音视频，或直接采集 Windows 系统声音，实时生成并持续纠正中文字幕。
+          直接采集 Windows 系统声音，实时生成并持续纠正中文字幕。
         </p>
       </section>
       <Workspace
@@ -47,13 +51,22 @@ export default function App() {
         onReset={() => void reset()}
       />
       <StatusBar
-        inputMode={config.inputMode}
         liveTranslateModel={config.liveTranslate.model}
         refinerModel={config.refiner.model}
-        asrProvider={config.asr.provider}
         stageLabel={stageLabel}
         lastRevisionSummary={lastRevisionSummary}
       />
+      <div className="timeline-header">
+        <h2 className="timeline-heading">实时字幕</h2>
+        <button
+          type="button"
+          className="floating-window-toggle-btn"
+          onClick={handleOpenFloatingWindow}
+          title="打开字幕悬浮窗"
+        >
+          ⊞ 悬浮窗
+        </button>
+      </div>
       <SubtitleTimeline subtitleBlocks={subtitleBlocks} timelineMode={timelineMode} />
       <SettingsPanel config={config} onSave={saveConfig} />
     </main>

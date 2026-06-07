@@ -112,3 +112,17 @@ export type PipelineEvent =
   | PipelineSubtitleAddedEvent
   | PipelineSubtitleRevisedEvent
   | PipelineCompletedEvent
+
+export type FloatingWindowState = {
+  isOpen: boolean
+  subtitleBlocks: SubtitleBlock[]
+  lastRevisionSummary: string
+}
+
+export type FloatingWindowBridge = {
+  open: () => Promise<void>
+  close: () => Promise<void>
+  toggle: () => Promise<void>
+  getState: () => Promise<FloatingWindowState>
+  onStateChanged: (listener: (state: FloatingWindowState) => void) => () => void
+}

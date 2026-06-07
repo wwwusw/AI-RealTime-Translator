@@ -7,7 +7,7 @@ export const refinerConfigSchema = z.object({
 })
 
 export const asrConfigSchema = z.object({
-  provider: z.enum(['scripted', 'openai-audio', 'dashscope-realtime']).default('scripted'),
+  provider: z.enum(['scripted', 'openai-audio', 'dashscope-realtime']).default('dashscope-realtime'),
   baseUrl: z.string().url().default('wss://dashscope.aliyuncs.com/api-ws/v1/realtime'),
   apiKey: z.string().default(''),
   model: z.string().min(1).default('qwen3-asr-flash-realtime')
@@ -22,12 +22,12 @@ export const liveTranslateConfigSchema = z.object({
 })
 
 export const appConfigSchema = z.object({
-  inputMode: z.enum(['file', 'system-audio']).default('file'),
+  inputMode: z.enum(['file', 'system-audio']).default('system-audio'),
   refiner: refinerConfigSchema.default({}),
   asr: asrConfigSchema.default({}),
   liveTranslate: liveTranslateConfigSchema.default({}),
   revisionWindowSize: z.number().int().min(1).max(6).default(4),
-  blockDurationMs: z.number().int().min(2000).max(4000).default(2000),
+  blockDurationMs: z.number().int().min(2000).max(4000).default(3000),
   chunkDurationMs: z.number().int().min(1000).max(10000).default(5000),
   chunkOverlapMs: z.number().int().min(0).max(2000).default(1000)
 })

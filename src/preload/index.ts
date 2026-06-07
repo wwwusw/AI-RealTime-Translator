@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { AppConfigBridge } from '../shared/app-config-bridge'
-import { appConfigEvents } from '../shared/events'
-import type { PipelineTasksBridge } from '../shared/pipeline'
+import { appConfigEvents, floatingWindowChannels } from '../shared/events'
+import type { FloatingWindowBridge, PipelineTasksBridge } from '../shared/pipeline'
 import { pipelineTaskChannels } from '../shared/pipeline'
 
 const appConfigApi: AppConfigBridge = {
@@ -31,5 +31,24 @@ const pipelineTasksApi: PipelineTasksBridge = {
   }
 }
 
+const floatingWindowApi: FloatingWindowBridge = {
+  open: () => ipcRenderer.invoke(floatingWindowChannels.open),
+  close: () => ipcRenderer.invoke(floatingWindowChannels.close),
+  toggle: () => ipcRenderer.invoke(floatingWindowChannels.toggle),
+  getState: () => ipcRenderer.invoke(floatingWindowChannels.getState),
+  onStateChanged: (listener) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, state: unknown) => {
+      listener(state as Parameters<typeof listener>[0])
+    }
+
+    ipcRenderer.on(floatingWindowChannels.stateChanged, wrappedListener)
+
+    return () => {
+      ipcRenderer.removeListener(floatingWindowChannels.stateChanged, wrappedListener)
+    }
+  }
+}
+
 contextBridge.exposeInMainWorld('appConfig', appConfigApi)
 contextBridge.exposeInMainWorld('pipelineTasks', pipelineTasksApi)
+contextBridge.exposeInMainWorld('floatingWindow', floatingWindowApi)
