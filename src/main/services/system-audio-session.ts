@@ -225,6 +225,9 @@ export const createSystemAudioPipelineSession = async ({
     return latestLiveBlock
   }
 
+  let refinementConsecutiveFailures = 0
+  const REFINEMENT_MAX_RETRIES = 3
+
   const tryRefinePendingBlocks = async () => {
     if (refinementInFlight) {
       return
@@ -264,10 +267,22 @@ export const createSystemAudioPipelineSession = async ({
       )
 
       if (applyRefinementResults(blocks, results)) {
+        refinementConsecutiveFailures = 0
         emitBlocks()
+      } else {
+        refinementConsecutiveFailures += 1
       }
+    } catch {
+      refinementConsecutiveFailures += 1
     } finally {
       refinementInFlight = false
+    }
+
+    if (
+      refinementConsecutiveFailures >= REFINEMENT_MAX_RETRIES ||
+      refinementConsecutiveFailures > blocks.filter((b) => b.status === 'pending_refine').length
+    ) {
+      return
     }
 
     if (blocks.some((block) => block.status === 'pending_refine')) {
